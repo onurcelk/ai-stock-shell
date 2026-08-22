@@ -18,6 +18,7 @@ export const ROUTES: Route[] = [
   { href: "/portfolio", label: "Portfolio" },
   { href: "/montecarlo", label: "Monte Carlo" },
   { href: "/history", label: "History" },
+  { href: "/research", label: "Research" },
 ];
 
 /**
@@ -27,7 +28,6 @@ export const ROUTES: Route[] = [
  * missing one. Move an entry into ROUTES when its page lands.
  */
 export const PLANNED: Route[] = [
-  { href: "/research", label: "Research" },
   { href: "/forecast", label: "Forecast" },
   { href: "/agents", label: "Agents" },
 ];

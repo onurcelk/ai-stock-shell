@@ -391,3 +391,55 @@ export function getStats(
   const params = new URLSearchParams({ period, interval });
   return request(`/api/stats/${ticker(symbol)}?${params}`);
 }
+
+// ---------------------------------------------------------------- Research
+
+/** Columns travel with the rows — these frames genuinely differ in shape. */
+export interface Frame {
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
+
+export interface ResearchResponse {
+  exists: boolean;
+  ledger_name: string;
+  counts: {
+    forecasts: number;
+    outcomes: number;
+    independent_cutoffs: number;
+    min_cutoffs: number;
+  };
+  /** The sentence that must sit above every number on this page. */
+  warning: string | null;
+  thin: boolean;
+  has_forecasts: boolean;
+  has_outcomes: boolean;
+  production: Frame;
+  weights: Frame;
+  quality: Frame;
+  calibration: Frame;
+  rolling: Frame;
+  leaderboard: Frame;
+  history: Frame;
+  promotion_requirements: Frame;
+  pipeline: Frame;
+  study: {
+    exists: boolean;
+    name: string;
+    /** Not a sample-size caveat — what disqualifies a replay is retrospection. */
+    warning: string | null;
+    has_outcomes: boolean;
+    n_scored: number;
+    n_independent_cutoffs: number;
+    n_symbols: number;
+    versions: string[];
+    summary: Frame;
+    actions: Frame;
+    versions_table: Frame;
+    vs_live: Frame;
+  };
+}
+
+export function getResearch(): Promise<ResearchResponse> {
+  return request("/api/research");
+}
