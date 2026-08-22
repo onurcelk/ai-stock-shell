@@ -7,24 +7,33 @@ import { ShimmerHeading } from "@/components/shimmer-heading";
 import { StatCard } from "@/components/stat-card";
 import { DESK_HOME } from "@/lib/routes";
 
+/**
+ * What the ledger actually holds, read on 2026-08-23.
+ *
+ * These were invented figures — a 0.67 hit rate at n=6 and a 0.21 Brier —
+ * printed directly under a hero that promises no hit rate without its
+ * confidence interval. At n=6 that interval is roughly [0.30, 0.90], which is
+ * a coin, and ~0.25 is what saying "50%" to everything scores. A page arguing
+ * for measurement discipline cannot open by breaking it.
+ *
+ * Hardcoded until Phase 5 exposes `core.research_view` over the API; they drift
+ * as collection runs, so re-read them rather than trusting these.
+ */
 const stats = [
   {
-    label: "Hit rate (n=6)",
-    value: "0.67",
-    delta: 0,
-    points: [50, 52, 48, 55, 58, 60, 67],
+    label: "Forecasts frozen",
+    value: "227",
+    note: "Stamped and sealed. Only a matured one can ever be scored.",
   },
   {
-    label: "Brier score",
-    value: "0.21",
-    delta: -4.2,
-    points: [30, 28, 27, 25, 24, 22, 21],
+    label: "Outcomes scored",
+    value: "93",
+    note: "Resolved against the price that actually arrived.",
   },
   {
-    label: "SPY vs. book",
-    value: "+2.3%",
-    delta: 2.3,
-    points: [10, 12, 11, 14, 15, 17, 18],
+    label: "Independent cutoffs",
+    value: "2 / 50",
+    note: "Below the promotion floor. Nothing here can support a decision yet — and it says so.",
   },
 ];
 
