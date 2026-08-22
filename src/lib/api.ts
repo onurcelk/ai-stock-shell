@@ -80,12 +80,113 @@ export interface SignalResponse {
   freeze: FreezeReport;
 }
 
+export interface Bar {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+}
+
+export interface OhlcvResponse {
+  symbol: string;
+  interval: string;
+  bars: Bar[];
+  is_fresh: boolean;
+}
+
+export interface PositionCall {
+  action: string;
+  score: number;
+  confidence: number;
+}
+
+export interface PositionRow {
+  Symbol: string;
+  Units: number;
+  "Unit cost": number;
+  "Cost basis": number;
+  Last: number | null;
+  Value: number | null;
+  "P&L": number | null;
+  "P&L %": number | null;
+  "Weight %": number | null;
+  call: PositionCall | null;
+}
+
+export interface PortfolioSummary {
+  market_value: number;
+  cost_basis: number;
+  pnl: number;
+  pnl_pct: number;
+  concentration_pct: number;
+  positions: number;
+  realised: number;
+  fees: number;
+}
+
+export interface BookSignal {
+  score: number;
+  confidence: number;
+  buying: string[];
+  selling: string[];
+  unreadable: string[];
+  total: number;
+}
+
+export interface LedgerRow {
+  When: string;
+  Side: string;
+  Symbol: string;
+  Units: number;
+  Price: number;
+  Value: number;
+  Commission: number;
+  Realised: number | null;
+}
+
+export interface PortfolioResponse {
+  summary: PortfolioSummary;
+  positions: PositionRow[];
+  unpriced: string[];
+  errors: Record<string, string>;
+  signal: BookSignal | null;
+  verdicts: Record<string, UltimateVerdict>;
+  ledger: LedgerRow[];
+}
+
 export class ApiError extends Error {}
 
 export async function getSignal(symbol: string): Promise<SignalResponse> {
   const response = await fetch(
     `${API_BASE}/api/signal/${encodeURIComponent(symbol.trim().toUpperCase())}`,
   );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new ApiError(body.detail ?? `request failed (${response.status})`);
+  }
+  return response.json();
+}
+
+export async function getOhlcv(
+  symbol: string,
+  period = "1y",
+  interval = "1d",
+): Promise<OhlcvResponse> {
+  const params = new URLSearchParams({ period, interval });
+  const response = await fetch(
+    `${API_BASE}/api/ohlcv/${encodeURIComponent(symbol.trim().toUpperCase())}?${params}`,
+  );
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new ApiError(body.detail ?? `request failed (${response.status})`);
+  }
+  return response.json();
+}
+
+export async function getPortfolio(): Promise<PortfolioResponse> {
+  const response = await fetch(`${API_BASE}/api/portfolio`);
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new ApiError(body.detail ?? `request failed (${response.status})`);
