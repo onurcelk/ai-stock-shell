@@ -1,9 +1,11 @@
+import Link from "next/link";
 import { AmbientBeams } from "@/components/ambient-beams";
 import { FeatureGrid } from "@/components/feature-grid";
 import { GradientButton } from "@/components/gradient-button";
 import { Nav } from "@/components/nav";
 import { ShimmerHeading } from "@/components/shimmer-heading";
 import { StatCard } from "@/components/stat-card";
+import { DESK_HOME } from "@/lib/routes";
 
 const stats = [
   {
@@ -49,13 +51,13 @@ export default function Home() {
             mistaken for a signal.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3">
-            <GradientButton>Open the desk</GradientButton>
-            <a
-              href="#"
+            <GradientButton href={DESK_HOME}>Open the desk</GradientButton>
+            <Link
+              href="/portfolio"
               className="rounded-lg border border-border px-5 py-2.5 text-sm text-text transition-colors hover:border-border-hover"
             >
-              Read the manifesto
-            </a>
+              See the book
+            </Link>
           </div>
         </section>
 

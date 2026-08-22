@@ -1,13 +1,28 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { staggerContainer, staggerItem, transitionInOut, transitionOut } from "@/lib/motion";
+import { ROUTES } from "@/lib/routes";
+import {
+  springSnappy,
+  staggerContainer,
+  staggerItem,
+  transitionInOut,
+  transitionOut,
+} from "@/lib/motion";
 
-const links = ["Research", "Predictions", "Book", "Docs"];
+const MotionLink = motion.create(Link);
 
 export function Nav() {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+
+  // A page owns its own entry and anything nested under it, so /chart stays lit
+  // if a detail route is ever added beneath it.
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <motion.div
@@ -17,34 +32,45 @@ export function Nav() {
       className="sticky top-4 z-20 mx-auto w-[min(920px,calc(100%-2rem))]"
     >
       <header className="flex items-center justify-between rounded-full border border-border bg-surface/70 px-5 py-3 backdrop-blur-md">
-        <motion.span
-          variants={staggerItem}
-          className="font-mono text-sm tracking-tight text-text"
-        >
-          obsidian<span className="text-accent">.</span>
-        </motion.span>
+        <motion.div variants={staggerItem}>
+          <Link
+            href="/"
+            className="font-mono text-sm tracking-tight text-text transition-colors hover:text-accent"
+          >
+            obsidian<span className="text-accent">.</span>
+          </Link>
+        </motion.div>
 
-        <nav className="hidden items-center gap-6 sm:flex">
-          {links.map((link) => (
-            <motion.a
-              key={link}
-              variants={staggerItem}
-              href="#"
-              className="text-sm text-text-muted transition-colors hover:text-text"
-            >
-              {link}
-            </motion.a>
-          ))}
+        <nav className="hidden items-center gap-1 sm:flex">
+          {ROUTES.map((route) => {
+            const active = isActive(route.href);
+            return (
+              <MotionLink
+                key={route.href}
+                href={route.href}
+                variants={staggerItem}
+                whileHover={{ y: -1 }}
+                transition={transitionOut}
+                aria-current={active ? "page" : undefined}
+                className={`relative rounded-full px-3.5 py-1.5 text-sm transition-colors ${
+                  active ? "text-text" : "text-text-muted hover:text-text"
+                }`}
+              >
+                {/* One shared pill that travels between entries, rather than one
+                    fading in and another out — the movement is what tells you
+                    where you went. */}
+                {active && (
+                  <motion.span
+                    layoutId="nav-active"
+                    transition={springSnappy}
+                    className="absolute inset-0 rounded-full bg-accent-dim"
+                  />
+                )}
+                <span className="relative">{route.label}</span>
+              </MotionLink>
+            );
+          })}
         </nav>
-
-        <motion.a
-          variants={staggerItem}
-          href="#"
-          whileHover={{ y: -1 }}
-          className="hidden rounded-full border border-border px-3.5 py-1.5 text-sm text-text transition-colors hover:border-border-hover sm:inline-block"
-        >
-          Sign in
-        </motion.a>
 
         <motion.button
           variants={staggerItem}
@@ -76,23 +102,24 @@ export function Nav() {
             className="mt-2 overflow-hidden rounded-2xl border border-border bg-surface/90 backdrop-blur-md sm:hidden"
           >
             <div className="flex flex-col gap-1 p-3">
-              {links.map((link) => (
-                <a
-                  key={link}
-                  href="#"
-                  onClick={() => setOpen(false)}
-                  className="rounded-lg px-3 py-2 text-sm text-text-muted transition-colors hover:bg-surface-raised hover:text-text"
-                >
-                  {link}
-                </a>
-              ))}
-              <a
-                href="#"
-                onClick={() => setOpen(false)}
-                className="rounded-lg px-3 py-2 text-sm text-text transition-colors hover:bg-surface-raised"
-              >
-                Sign in
-              </a>
+              {ROUTES.map((route) => {
+                const active = isActive(route.href);
+                return (
+                  <Link
+                    key={route.href}
+                    href={route.href}
+                    onClick={() => setOpen(false)}
+                    aria-current={active ? "page" : undefined}
+                    className={`rounded-lg px-3 py-2 text-sm transition-colors ${
+                      active
+                        ? "bg-accent-dim text-text"
+                        : "text-text-muted hover:bg-surface-raised hover:text-text"
+                    }`}
+                  >
+                    {route.label}
+                  </Link>
+                );
+              })}
             </div>
           </motion.nav>
         )}

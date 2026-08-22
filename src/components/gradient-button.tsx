@@ -1,19 +1,22 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 import { springSnappy, transitionOut } from "@/lib/motion";
+
+const MotionLink = motion.create(Link);
 
 export function GradientButton({
   children,
   href,
 }: {
   children: ReactNode;
-  href?: string;
+  href: string;
 }) {
   return (
-    <motion.a
-      href={href ?? "#"}
+    <MotionLink
+      href={href}
       className="relative inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium text-bg"
       style={{
         background:
@@ -24,6 +27,6 @@ export function GradientButton({
       transition={{ ...transitionOut, scale: springSnappy, y: springSnappy }}
     >
       {children}
-    </motion.a>
+    </MotionLink>
   );
 }
