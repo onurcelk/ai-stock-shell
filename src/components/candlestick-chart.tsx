@@ -3,18 +3,65 @@
 import { motion } from "motion/react";
 import type { Bar } from "@/lib/api";
 
-export function CandlestickChart({ bars }: { bars: Bar[] }) {
+export interface Overlay {
+  name: string;
+  values: (number | null)[];
+}
+
+/**
+ * Overlay line colours.
+ *
+ * Deliberately not the candle colours, and deliberately not `--up`/`--down`:
+ * a study line reading as "up" or "down" would claim agreement with the price
+ * it is drawn against. `charts.py` makes the same choice for the same reason.
+ * The accent leads; the rest are neutral weights of it.
+ */
+const OVERLAY_COLORS = [
+  "var(--accent)",
+  "color-mix(in srgb, var(--accent) 55%, var(--text))",
+  "var(--text-muted)",
+  "color-mix(in srgb, var(--accent) 40%, var(--text-faint))",
+];
+
+export function CandlestickChart({
+  bars,
+  overlays = [],
+}: {
+  bars: Bar[];
+  overlays?: Overlay[];
+}) {
   if (bars.length === 0) return null;
 
   const width = 100;
   const height = 40;
-  const high = Math.max(...bars.map((b) => b.high));
-  const low = Math.min(...bars.map((b) => b.low));
+
+  // The scale has to cover the overlays too, or a study drawn outside the
+  // candles' range escapes the chart.
+  const overlayValues = overlays.flatMap((o) =>
+    o.values.filter((v): v is number => v !== null && Number.isFinite(v)),
+  );
+  const high = Math.max(...bars.map((b) => b.high), ...overlayValues);
+  const low = Math.min(...bars.map((b) => b.low), ...overlayValues);
   const range = high - low || 1;
   const slot = width / bars.length;
   const bodyWidth = Math.min(slot * 0.6, 1.2);
 
   const y = (price: number) => height - ((price - low) / range) * height;
+
+  const overlayPath = (values: (number | null)[]) => {
+    let out = "";
+    let pen = false;
+    values.forEach((v, i) => {
+      if (v === null || !Number.isFinite(v)) {
+        pen = false;
+        return;
+      }
+      const x = i * slot + slot / 2;
+      out += `${pen ? "L" : "M"}${x.toFixed(2)},${y(v).toFixed(2)} `;
+      pen = true;
+    });
+    return out.trim();
+  };
 
   return (
     <div className="rounded-xl border border-border bg-surface p-5">
@@ -51,11 +98,44 @@ export function CandlestickChart({ bars }: { bars: Bar[] }) {
             </motion.g>
           );
         })}
+
+        {overlays.map((overlay, index) => (
+          <motion.path
+            key={overlay.name}
+            d={overlayPath(overlay.values)}
+            fill="none"
+            stroke={OVERLAY_COLORS[index % OVERLAY_COLORS.length]}
+            strokeWidth={0.3}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            initial={{ pathLength: 0, opacity: 0 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ duration: 0.8, ease: [0.65, 0, 0.35, 1] }}
+          />
+        ))}
       </svg>
+
       <div className="mt-2 flex justify-between text-sm text-text-faint">
         <span>{bars[0].date.slice(0, 10)}</span>
         <span>{bars[bars.length - 1].date.slice(0, 10)}</span>
       </div>
+
+      {overlays.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-border pt-3">
+          {overlays.map((overlay, index) => (
+            <span
+              key={overlay.name}
+              className="flex items-center gap-2 text-sm text-text-muted"
+            >
+              <span
+                className="inline-block h-0.5 w-4"
+                style={{ background: OVERLAY_COLORS[index % OVERLAY_COLORS.length] }}
+              />
+              {overlay.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

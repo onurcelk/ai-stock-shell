@@ -158,31 +158,30 @@ export interface PortfolioResponse {
 
 export class ApiError extends Error {}
 
-export async function getSignal(symbol: string): Promise<SignalResponse> {
-  const response = await fetch(
-    `${API_BASE}/api/signal/${encodeURIComponent(symbol.trim().toUpperCase())}`,
-  );
+/** Every call goes through here, so one error shape is parsed in one place. */
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, init);
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new ApiError(body.detail ?? `request failed (${response.status})`);
+    const body = await response.json().catch(() => null);
+    throw new ApiError(extractErrorMessage(body, response.status));
   }
   return response.json();
 }
 
-export async function getOhlcv(
+const ticker = (symbol: string) =>
+  encodeURIComponent(symbol.trim().toUpperCase());
+
+export function getSignal(symbol: string): Promise<SignalResponse> {
+  return request(`/api/signal/${ticker(symbol)}`);
+}
+
+export function getOhlcv(
   symbol: string,
   period = "1y",
   interval = "1d",
 ): Promise<OhlcvResponse> {
   const params = new URLSearchParams({ period, interval });
-  const response = await fetch(
-    `${API_BASE}/api/ohlcv/${encodeURIComponent(symbol.trim().toUpperCase())}?${params}`,
-  );
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new ApiError(body.detail ?? `request failed (${response.status})`);
-  }
-  return response.json();
+  return request(`/api/ohlcv/${ticker(symbol)}?${params}`);
 }
 
 function extractErrorMessage(body: unknown, status: number): string {
@@ -216,32 +215,179 @@ export interface Transaction {
   note: string;
 }
 
-export async function postTrade(trade: TradeRequest): Promise<Transaction> {
-  const response = await fetch(`${API_BASE}/api/portfolio/trade`, {
+export function postTrade(trade: TradeRequest): Promise<Transaction> {
+  return request("/api/portfolio/trade", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(trade),
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new ApiError(extractErrorMessage(body, response.status));
-  }
-  return response.json();
 }
 
 export async function clearLedger(): Promise<void> {
-  const response = await fetch(`${API_BASE}/api/portfolio/ledger/clear`, { method: "POST" });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new ApiError(extractErrorMessage(body, response.status));
-  }
+  await request("/api/portfolio/ledger/clear", { method: "POST" });
 }
 
-export async function getPortfolio(): Promise<PortfolioResponse> {
-  const response = await fetch(`${API_BASE}/api/portfolio`);
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new ApiError(body.detail ?? `request failed (${response.status})`);
-  }
-  return response.json();
+export function getPortfolio(): Promise<PortfolioResponse> {
+  return request("/api/portfolio");
+}
+
+// ------------------------------------------------------------- Monte Carlo
+
+export interface MonteCarloSummary {
+  mean: number;
+  median: number;
+  p5: number;
+  p95: number;
+  prob_up: number;
+}
+
+export interface MonteCarloResponse {
+  symbol: string;
+  interval: string;
+  days: number;
+  simulations: number;
+  seed: number | null;
+  paths_drawn: number;
+  last_price: number;
+  daily_volatility: number;
+  drift: number;
+  summary: MonteCarloSummary;
+  /** Sampled for drawing — never the whole matrix. */
+  paths: number[][];
+  median_path: number[];
+  p5_path: number[];
+  p95_path: number[];
+  histogram: { edges: number[]; counts: number[] };
+  is_fresh: boolean;
+}
+
+export function getMonteCarlo(
+  symbol: string,
+  options: { days: number; simulations: number; seed: number | null },
+): Promise<MonteCarloResponse> {
+  const params = new URLSearchParams({
+    days: String(options.days),
+    simulations: String(options.simulations),
+  });
+  if (options.seed !== null) params.set("seed", String(options.seed));
+  return request(`/api/montecarlo/${ticker(symbol)}?${params}`);
+}
+
+// ----------------------------------------------------------------- History
+
+export interface RunSummary {
+  id: string;
+  kind: string;
+  kind_label: string;
+  label: string;
+  saved_at: string;
+  age: string;
+  settings: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+}
+
+export interface RunsResponse {
+  runs: RunSummary[];
+  table: Record<string, unknown>[];
+  columns: string[];
+  kinds: Record<string, string>;
+  total: number;
+}
+
+export interface RunDetail extends RunSummary {
+  payload: Record<string, unknown>;
+}
+
+export function getRuns(kind?: string): Promise<RunsResponse> {
+  return request(`/api/runs${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`);
+}
+
+export function getRun(id: string): Promise<RunDetail> {
+  return request(`/api/runs/${encodeURIComponent(id)}`);
+}
+
+export async function deleteRun(id: string): Promise<void> {
+  await request(`/api/runs/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export async function clearRuns(): Promise<number> {
+  const body = await request<{ removed: number }>("/api/runs/clear?confirm=true", {
+    method: "POST",
+  });
+  return body.removed;
+}
+
+// ----------------------------------------------------------------- Studies
+
+export interface StudyMeta {
+  key: string;
+  name: string;
+  /** "overlay" draws on the price axis; "oscillator" gets its own pane. */
+  pane: string;
+  describe: string;
+  requires: string[];
+  lines: string[];
+  levels: number[];
+  source: string;
+}
+
+export interface StudiesCatalogue {
+  studies: StudyMeta[];
+  panes: { overlay: string; oscillator: string };
+  rules: Record<string, string>;
+}
+
+export interface StudiesResponse {
+  symbol: string;
+  interval: string;
+  dates: string[];
+  available: StudyMeta[];
+  studies: Record<string, Record<string, (number | null)[]>>;
+  /** Keys the series lacks the columns to draw, each with the reason. */
+  unsupported: Record<string, string>;
+  bars: number;
+  is_fresh: boolean;
+}
+
+export function getStudyCatalogue(): Promise<StudiesCatalogue> {
+  return request("/api/studies");
+}
+
+export function getStudies(
+  symbol: string,
+  keys: string[],
+  options: { period?: string; interval?: string; bars?: number } = {},
+): Promise<StudiesResponse> {
+  const params = new URLSearchParams({ keys: keys.join(",") });
+  if (options.period) params.set("period", options.period);
+  if (options.interval) params.set("interval", options.interval);
+  if (options.bars) params.set("bars", String(options.bars));
+  return request(`/api/studies/${ticker(symbol)}?${params}`);
+}
+
+export interface StatsResponse {
+  symbol: string;
+  interval: string;
+  stats: {
+    rows: number;
+    start: string;
+    end: string;
+    first: number;
+    last: number;
+    change_pct: number;
+    high: number;
+    low: number;
+    bars_per_year: number;
+    volatility_pct: number;
+  };
+  is_fresh: boolean;
+}
+
+export function getStats(
+  symbol: string,
+  period = "1y",
+  interval = "1d",
+): Promise<StatsResponse> {
+  const params = new URLSearchParams({ period, interval });
+  return request(`/api/stats/${ticker(symbol)}?${params}`);
 }
