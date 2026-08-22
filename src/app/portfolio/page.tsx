@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { staggerContainer, staggerItem, transitionInOut } from "@/lib/motion";
 import { getPortfolio, ApiError, type PortfolioResponse } from "@/lib/api";
+import { TradeForm } from "@/components/trade-form";
 
 const ACTION_COLOR: Record<string, string> = {
   STRONG_BUY: "var(--up)",
@@ -31,6 +32,7 @@ export default function PortfolioPage() {
   const [data, setData] = useState<PortfolioResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let ignore = false;
@@ -48,7 +50,7 @@ export default function PortfolioPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   if (loading) {
     return (
@@ -80,6 +82,10 @@ export default function PortfolioPage() {
       >
         Portfolio
       </motion.h1>
+
+      <div className="mb-6">
+        <TradeForm onTraded={() => setRefreshKey((k) => k + 1)} />
+      </div>
 
       <motion.div
         variants={staggerContainer(0.05)}

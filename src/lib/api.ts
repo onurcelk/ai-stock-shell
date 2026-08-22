@@ -185,6 +185,58 @@ export async function getOhlcv(
   return response.json();
 }
 
+function extractErrorMessage(body: unknown, status: number): string {
+  const detail = (body as { detail?: unknown } | null)?.detail;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    // FastAPI/pydantic validation errors: a list of {loc, msg, type}.
+    return detail
+      .map((d) => (typeof d === "object" && d && "msg" in d ? String(d.msg) : String(d)))
+      .join("; ");
+  }
+  return `request failed (${status})`;
+}
+
+export interface TradeRequest {
+  side: "buy" | "sell";
+  symbol: string;
+  quantity: number;
+  price: number;
+  fee?: number;
+}
+
+export interface Transaction {
+  at: string;
+  side: string;
+  symbol: string;
+  quantity: number;
+  price: number;
+  fee: number;
+  realised: number;
+  note: string;
+}
+
+export async function postTrade(trade: TradeRequest): Promise<Transaction> {
+  const response = await fetch(`${API_BASE}/api/portfolio/trade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(trade),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(extractErrorMessage(body, response.status));
+  }
+  return response.json();
+}
+
+export async function clearLedger(): Promise<void> {
+  const response = await fetch(`${API_BASE}/api/portfolio/ledger/clear`, { method: "POST" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new ApiError(extractErrorMessage(body, response.status));
+  }
+}
+
 export async function getPortfolio(): Promise<PortfolioResponse> {
   const response = await fetch(`${API_BASE}/api/portfolio`);
   if (!response.ok) {
