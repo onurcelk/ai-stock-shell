@@ -162,14 +162,28 @@ export interface PortfolioResponse {
   ledger: LedgerRow[];
 }
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  /**
+   * The HTTP status, when the failure came back as a response rather than as a
+   * dead connection. `followJob` needs it to tell a stale job (410, the server
+   * restarted and the in-memory registry went with it) from a job that is
+   * merely missing -- the first is permanent and worth saying so, and retrying
+   * either one would never succeed.
+   */
+  readonly status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.status = status;
+  }
+}
 
 /** Every call goes through here, so one error shape is parsed in one place. */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, init);
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new ApiError(extractErrorMessage(body, response.status));
+    throw new ApiError(extractErrorMessage(body, response.status), response.status);
   }
   return response.json();
 }
@@ -598,6 +612,19 @@ export function startAgent(request: AgentRequest): Promise<StartedJob> {
 
 export function getAgentCatalogue(): Promise<AgentCatalogue> {
   return request("/api/agents");
+}
+
+export interface ModelCatalogue {
+  models: string[];
+  default_seed: number;
+}
+
+/**
+ * The network architectures the engine actually has, rather than three names
+ * copied into this file -- the same reason the agent roster is fetched.
+ */
+export function getModelCatalogue(): Promise<ModelCatalogue> {
+  return request("/api/models");
 }
 
 /**

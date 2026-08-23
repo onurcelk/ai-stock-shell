@@ -16,6 +16,8 @@ export const ROUTES: Route[] = [
   { href: "/signal", label: "Signal" },
   { href: "/chart", label: "Chart" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/forecast", label: "Forecast" },
+  { href: "/agents", label: "Agents" },
   { href: "/montecarlo", label: "Monte Carlo" },
   { href: "/history", label: "History" },
   { href: "/research", label: "Research" },
@@ -26,11 +28,12 @@ export const ROUTES: Route[] = [
  * order the header will eventually show is visible from the code that renders
  * it. Deliberately not rendered: a nav entry that leads nowhere is worse than a
  * missing one. Move an entry into ROUTES when its page lands.
+ *
+ * Empty since Phase 6: Forecast and Agents were the last two, and they are in
+ * ROUTES above. Kept rather than deleted because the convention is the useful
+ * part -- the next page to be planned goes here first.
  */
-export const PLANNED: Route[] = [
-  { href: "/forecast", label: "Forecast" },
-  { href: "/agents", label: "Agents" },
-];
+export const PLANNED: Route[] = [];
 
 /** Where the landing page's primary call to action sends people. */
 export const DESK_HOME = "/signal";
