@@ -7,6 +7,7 @@ import {
   getModelCatalogue,
   startProjection,
   startWalkForward,
+  type BarWindow,
   type ProjectResult,
   type WalkForwardResult,
 } from "@/lib/api";
@@ -14,6 +15,7 @@ import { useJob } from "@/lib/use-job";
 import { JobProgress } from "@/components/job-progress";
 import { BarSeries, LineSeries, Legend, type Series } from "@/components/series-chart";
 import { DataTable } from "@/components/data-table";
+import { DataWindow } from "@/components/data-window";
 
 const number = (v: number, digits = 2) =>
   v.toLocaleString(undefined, {
@@ -49,6 +51,7 @@ export default function ForecastPage() {
   const [inputValue, setInputValue] = useState("AAPL");
   const [symbol, setSymbol] = useState("AAPL");
 
+  const [dataWindow, setDataWindow] = useState<BarWindow>({});
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState("LSTM");
   const [folds, setFolds] = useState(5);
@@ -91,6 +94,7 @@ export default function ForecastPage() {
 
   const network = {
     symbol,
+    ...dataWindow,
     model,
     epochs,
     num_layers: numLayers,
@@ -142,6 +146,8 @@ export default function ForecastPage() {
           Set
         </button>
       </form>
+
+      <DataWindow value={dataWindow} onChange={setDataWindow} />
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-4">
         <label className="rounded-lg border border-border bg-surface px-4 py-3">

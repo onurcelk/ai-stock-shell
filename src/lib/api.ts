@@ -191,8 +191,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 const ticker = (symbol: string) =>
   encodeURIComponent(symbol.trim().toUpperCase());
 
-export function getSignal(symbol: string): Promise<SignalResponse> {
-  return request(`/api/signal/${ticker(symbol)}`);
+/**
+ * Read the verdict. Never records one — that is `freezeSignal`.
+ *
+ * `dataset` reads a bundled CSV instead of fetching, which is the offline
+ * path. There is no dataset option on the freeze: those files end in
+ * 2017–2019, and recording one as a *prospective* forecast is the thing the
+ * ledger's own guard exists to refuse.
+ */
+export function getSignal(
+  symbol: string,
+  options: { dataset?: string } = {},
+): Promise<SignalResponse> {
+  const query = options.dataset
+    ? `?dataset=${encodeURIComponent(options.dataset)}`
+    : "";
+  return request(`/api/signal/${ticker(symbol)}${query}`);
 }
 
 /**
@@ -510,10 +524,8 @@ export interface StartedJob extends Job {
   duplicate: boolean;
 }
 
-export interface WalkForwardRequest {
+export interface WalkForwardRequest extends BarWindow {
   symbol: string;
-  period?: string;
-  interval?: string;
   model?: string;
   folds?: number;
   horizon?: number;
@@ -558,11 +570,9 @@ export interface ProjectResult {
   direction: number;
 }
 
-export interface AgentRequest {
+export interface AgentRequest extends BarWindow {
   symbol: string;
   agent: string;
-  period?: string;
-  interval?: string;
   iterations?: number;
   window_size?: number;
   layer_size?: number;
@@ -612,6 +622,107 @@ export function startAgent(request: AgentRequest): Promise<StartedJob> {
 
 export function getAgentCatalogue(): Promise<AgentCatalogue> {
   return request("/api/agents");
+}
+
+/**
+ * What a caller may ask for: intervals with their valid periods, and the
+ * bundled datasets that make an offline session possible.
+ *
+ * The per-interval period lists are not decoration. Yahoo will not serve five
+ * years of hourly bars, so a selector offering that combination produces a
+ * failure the person using it cannot diagnose — the selector reads these.
+ */
+export interface IntervalOption {
+  code: string;
+  name: string;
+  periods: string[];
+  intraday: boolean;
+}
+
+export interface SourceCatalogue {
+  intervals: IntervalOption[];
+  default_interval: string;
+  default_period: string;
+  datasets: string[];
+  quick_picks: string[];
+}
+
+export function getSources(): Promise<SourceCatalogue> {
+  return request("/api/sources");
+}
+
+/**
+ * Which bars a request is about. Shared by every scoring endpoint.
+ *
+ * Named `BarWindow` rather than `Window` so it never reads as the DOM global
+ * in a file that is also doing `fetch`.
+ */
+export interface BarWindow {
+  period?: string;
+  interval?: string;
+  /** A bundled CSV instead of a live symbol — the offline path. */
+  dataset?: string;
+  /** ISO dates. These trim what is looked at, not what is downloaded. */
+  start?: string;
+  end?: string;
+}
+
+export interface RebalanceOption {
+  label: string;
+  bars: number;
+}
+
+export interface BasketOptions {
+  rebalance: RebalanceOption[];
+  max_holdings: number;
+  quick_picks: string[];
+}
+
+export interface BasketResult {
+  symbols: string[];
+  /** Symbols that could not be loaded, with the reason. */
+  skipped: Record<string, string>;
+  dates: string[];
+  equity: number[];
+  /** Each holding rebased to the same starting capital. */
+  rebased: Record<string, number[]>;
+  contributions: Record<string, number[]>;
+  weights: Record<string, number>;
+  /** Where the money actually ended up, after drift. */
+  final_weights: Record<string, number>;
+  drift_pct: number;
+  heaviest: string | null;
+  rebalanced: number;
+  rebalance_every: number;
+  initial_money: number;
+  bars: number;
+  metrics: Record<string, number>;
+  per_symbol: Record<string, unknown>[];
+  correlation: { symbols: string[]; matrix: number[][] } | null;
+  diversification: { average: number; verdict: string } | null;
+}
+
+export function getBasketOptions(): Promise<BasketOptions> {
+  return request("/api/basket/options");
+}
+
+export function getBasket(
+  symbols: string[],
+  options: BarWindow & {
+    weights?: number[];
+    rebalance_every?: number;
+    initial_money?: number;
+  } = {},
+): Promise<BasketResult> {
+  const { weights, ...rest } = options;
+  const query = new URLSearchParams({ symbols: symbols.join(",") });
+  if (weights?.length) query.set("weights", weights.join(","));
+  for (const [name, value] of Object.entries(rest)) {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(name, String(value));
+    }
+  }
+  return request(`/api/basket?${query}`);
 }
 
 /**
@@ -670,12 +781,24 @@ export interface StrategyResult {
   trades: Record<string, unknown>[];
   /** Overlay lines to draw on a price axis; null for an oscillator. */
   bands: Record<string, number[]> | null;
+  /**
+   * The candles this signal was scored on, indexed by `buys`/`sells`.
+   *
+   * Carried in the same response rather than fetched separately: a second
+   * request could resolve to a different window, and a marker drawn on the
+   * wrong candle is worse than no marker. A close-only series has only
+   * `close`.
+   */
+  ohlc: {
+    open?: number[];
+    high?: number[];
+    low?: number[];
+    close: number[];
+  };
 }
 
-export interface StrategyRequest {
+export interface StrategyRequest extends BarWindow {
   key: string;
-  period?: string;
-  interval?: string;
   window?: number;
   follow_breakout?: boolean;
   short_window?: number;
@@ -693,6 +816,30 @@ export interface StrategyRequest {
 export function getStrategyCatalogue(bars?: number): Promise<StrategyCatalogue> {
   const query = bars ? `?bars=${bars}` : "";
   return request(`/api/strategies${query}`);
+}
+
+/**
+ * Score a rule or study on a CSV the viewer supplies.
+ *
+ * The file goes as the raw body rather than a multipart form — a `File` is a
+ * `Blob`, so `fetch` sends it directly and the server needs no form parser.
+ * The upload is scored and dropped; nothing is stored.
+ */
+export function runUploadedStrategy(
+  file: File,
+  options: Omit<StrategyRequest, "dataset" | "period" | "interval">,
+): Promise<StrategyResult> {
+  const query = new URLSearchParams({ name: file.name });
+  for (const [name, value] of Object.entries(options)) {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(name, String(value));
+    }
+  }
+  return request(`/api/strategies/upload?${query}`, {
+    method: "POST",
+    headers: { "Content-Type": "text/csv" },
+    body: file,
+  });
 }
 
 export function runStrategy(

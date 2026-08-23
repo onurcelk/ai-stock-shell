@@ -8,10 +8,12 @@ import {
   getAgentCatalogue,
   getStrategyCatalogue,
   runStrategy,
+  runUploadedStrategy,
   startAgent,
   type AgentCatalogue,
   type AgentResult,
   type StrategyCatalogue,
+  type BarWindow,
   type StrategyEntry,
   type StrategyResult,
 } from "@/lib/api";
@@ -19,6 +21,8 @@ import { useJob } from "@/lib/use-job";
 import { JobProgress } from "@/components/job-progress";
 import { LineSeries, Legend, type Series } from "@/components/series-chart";
 import { DataTable } from "@/components/data-table";
+import { DataWindow } from "@/components/data-window";
+import { CandlestickChart } from "@/components/candlestick-chart";
 
 const number = (v: number, digits = 2) =>
   v.toLocaleString(undefined, {
@@ -70,6 +74,10 @@ function Field({
 export default function AgentsPage() {
   const [inputValue, setInputValue] = useState("AAPL");
   const [symbol, setSymbol] = useState("AAPL");
+  // Named `dataWindow`, not `window`: this is a client component and the DOM
+  // global of that name is one typo away.
+  const [dataWindow, setDataWindow] = useState<BarWindow>({});
+  const [upload, setUpload] = useState<File | null>(null);
 
   const [agents, setAgents] = useState<AgentCatalogue | null>(null);
   const [strategies, setStrategies] = useState<StrategyCatalogue | null>(null);
@@ -155,18 +163,28 @@ export default function AgentsPage() {
     if (!choice || choice.kind === "rl") return;
     setInstantBusy(true);
     setInstantError(null);
+    const settings = {
+      key: choice.entry.key,
+      ...ruleParams,
+      initial_money: initialMoney,
+      max_buy: maxBuy,
+      max_sell: maxSell,
+      fee_pct: feePct,
+      slippage_pct: slippagePct,
+      sizing,
+      size_pct: sizePct,
+    };
     try {
-      const body = await runStrategy(symbol, {
-        key: choice.entry.key,
-        ...ruleParams,
-        initial_money: initialMoney,
-        max_buy: maxBuy,
-        max_sell: maxSell,
-        fee_pct: feePct,
-        slippage_pct: slippagePct,
-        sizing,
-        size_pct: sizePct,
-      });
+      // A supplied file wins over the live symbol: someone who has just chosen
+      // one means to score it, and silently reading the ticker instead would
+      // put a plausible number under the wrong name.
+      const body = upload
+        ? await runUploadedStrategy(upload, {
+            ...settings,
+            start: dataWindow.start,
+            end: dataWindow.end,
+          })
+        : await runStrategy(symbol, { ...settings, ...dataWindow });
       setInstant(body);
     } catch (error) {
       setInstant(null);
@@ -177,8 +195,8 @@ export default function AgentsPage() {
       setInstantBusy(false);
     }
   }, [
-    choice, symbol, ruleParams, initialMoney, maxBuy, maxSell, feePct,
-    slippagePct, sizing, sizePct,
+    choice, symbol, dataWindow, upload, ruleParams, initialMoney, maxBuy,
+    maxSell, feePct, slippagePct, sizing, sizePct,
   ]);
 
   // An instant strategy costs milliseconds, so it re-scores as the controls
@@ -202,6 +220,7 @@ export default function AgentsPage() {
       startAgent({
         symbol,
         agent: choice.name,
+        ...dataWindow,
         iterations,
         window_size: windowSize,
         layer_size: layerSize,
@@ -276,6 +295,13 @@ export default function AgentsPage() {
           Set
         </button>
       </form>
+
+      <DataWindow
+        value={dataWindow}
+        onChange={setDataWindow}
+        upload={upload}
+        onUpload={setUpload}
+      />
 
       {catalogueError && <p className="mt-4 text-sm text-down">{catalogueError}</p>}
 
@@ -616,6 +642,50 @@ export default function AgentsPage() {
               </div>
             ))}
           </motion.div>
+
+          {/* The price the signal was read from, with the trades it produced.
+              Bars, markers and study lines all come from the one response, so
+              a marker cannot land on the wrong candle. */}
+          {instant && instant.ohlc.close && (
+            <motion.div
+              variants={staggerItem}
+              transition={transitionInOut}
+              className="rounded-xl border border-border bg-surface p-5"
+            >
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-base text-text">Price and trades</h2>
+                <p className="font-mono text-sm text-text-faint">
+                  {instant.buys.length} buys · {instant.sells.length} sells
+                </p>
+              </div>
+              <div className="mt-4">
+                <CandlestickChart
+                  bare
+                  bars={instant.dates.map((date, i) => ({
+                    date,
+                    open: instant.ohlc.open?.[i] ?? instant.ohlc.close[i],
+                    high: instant.ohlc.high?.[i] ?? instant.ohlc.close[i],
+                    low: instant.ohlc.low?.[i] ?? instant.ohlc.close[i],
+                    close: instant.ohlc.close[i],
+                    volume: 0,
+                  }))}
+                  overlays={Object.entries(instant.bands ?? {}).map(
+                    ([name, values]) => ({ name, values }),
+                  )}
+                  buys={instant.buys}
+                  sells={instant.sells}
+                />
+              </div>
+              <p className="mt-3 text-sm text-text-faint">
+                Green triangles are entries, red are exits.
+                {instant.bands
+                  ? " The lines are the study's own overlay, drawn from the same reading that produced the signals."
+                  : instant.kind === "study"
+                    ? " This study is an oscillator — nothing it draws belongs on a price axis, so the candles are shown bare."
+                    : ""}
+              </p>
+            </motion.div>
+          )}
 
           <motion.div
             variants={staggerItem}

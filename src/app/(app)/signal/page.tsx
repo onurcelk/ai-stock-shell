@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { staggerContainer, transitionInOut } from "@/lib/motion";
-import { getSignal, ApiError, type SignalResponse } from "@/lib/api";
+import { getSignal, getSources, ApiError, type SignalResponse } from "@/lib/api";
 import { SignalCard } from "@/components/signal-card";
 import { HorizonCard } from "@/components/horizon-card";
 import { FreezeControl } from "@/components/freeze-control";
@@ -14,6 +14,11 @@ export default function SignalPage() {
   const [data, setData] = useState<SignalResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // The offline path: read a bundled CSV instead of fetching. Kept to a
+  // single select rather than the full window control, because a bundled
+  // file is one fixed series -- interval and period do not apply to it.
+  const [dataset, setDataset] = useState("");
+  const [datasets, setDatasets] = useState<string[]>([]);
 
   useEffect(() => {
     let ignore = false;
@@ -24,7 +29,7 @@ export default function SignalPage() {
     setLoading(true);
     setError(null);
 
-    getSignal(symbol)
+    getSignal(symbol, { dataset: dataset || undefined })
       .then((response) => {
         if (!ignore) setData(response);
       })
@@ -40,7 +45,21 @@ export default function SignalPage() {
     return () => {
       ignore = true;
     };
-  }, [symbol]);
+  }, [symbol, dataset]);
+
+  useEffect(() => {
+    let ignore = false;
+    getSources()
+      .then((body) => {
+        if (!ignore) setDatasets(body.datasets);
+      })
+      .catch(() => {
+        // No offline list is survivable; the live path is unaffected.
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
@@ -61,11 +80,30 @@ export default function SignalPage() {
         />
         <button
           onClick={() => setSymbol(inputValue)}
-          className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          disabled={Boolean(dataset)}
+          className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           Get signal
         </button>
       </motion.div>
+
+      {datasets.length > 0 && (
+        <label className="mb-8 flex flex-wrap items-center gap-3 text-sm text-text-muted">
+          Or read a bundled dataset — works with no network
+          <select
+            value={dataset}
+            onChange={(event) => setDataset(event.target.value)}
+            className="rounded border border-border bg-bg px-2 py-1 font-mono text-sm text-text outline-none focus:border-accent"
+          >
+            <option value="">Live ticker</option>
+            {datasets.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {loading && <p className="text-sm text-text-muted">Reading {symbol}&hellip;</p>}
 
@@ -79,7 +117,18 @@ export default function SignalPage() {
         <div className="space-y-6">
           <SignalCard verdict={data.verdict} />
 
-          <FreezeControl symbol={symbol} onFrozen={setData} />
+          {/* Freezing a bundled file would record a "prospective" forecast
+              about bars from 2017, which the ledger's own guard refuses. So
+              the control is absent offline rather than present and failing. */}
+          {dataset ? (
+            <p className="rounded-xl border border-border bg-surface p-5 text-sm text-text-muted">
+              Reading <span className="font-mono">{dataset}</span>. A bundled file
+              ends years ago, so this reading cannot be recorded as a prospective
+              forecast — switch back to a live ticker to freeze one.
+            </p>
+          ) : (
+            <FreezeControl symbol={symbol} onFrozen={setData} />
+          )}
 
           <motion.div
             variants={staggerContainer(0.06)}

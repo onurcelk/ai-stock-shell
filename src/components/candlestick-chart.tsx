@@ -26,9 +26,21 @@ const OVERLAY_COLORS = [
 export function CandlestickChart({
   bars,
   overlays = [],
+  buys = [],
+  sells = [],
+  bare = false,
 }: {
   bars: Bar[];
   overlays?: Overlay[];
+  /**
+   * Indices into `bars` where a strategy opened and closed. Drawn as
+   * triangles below and above the candle rather than as coloured candles,
+   * because the candle's own colour already means something else.
+   */
+  buys?: number[];
+  sells?: number[];
+  /** Drop the card chrome, for a chart already inside a panel. */
+  bare?: boolean;
 }) {
   if (bars.length === 0) return null;
 
@@ -63,8 +75,29 @@ export function CandlestickChart({
     return out.trim();
   };
 
-  return (
-    <div className="rounded-xl border border-border bg-surface p-5">
+  // A marker sits a little clear of the candle it belongs to, so it never
+  // hides the bar it is pointing at.
+  const marker = (i: number, side: "buy" | "sell") => {
+    const bar = bars[i];
+    if (!bar) return null;
+    const x = i * slot + slot / 2;
+    const size = Math.min(slot * 0.5, 0.9);
+    const tip = side === "buy" ? y(bar.low) + 0.6 : y(bar.high) - 0.6;
+    const base = side === "buy" ? tip + size : tip - size;
+    return (
+      <motion.polygon
+        key={`${side}-${i}`}
+        points={`${x},${tip} ${x - size},${base} ${x + size},${base}`}
+        fill={side === "buy" ? "var(--up)" : "var(--down)"}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.95 }}
+        transition={{ duration: 0.3 }}
+      />
+    );
+  };
+
+  const body = (
+    <>
       <svg viewBox={`0 0 ${width} ${height}`} className="h-64 w-full overflow-visible">
         {bars.map((bar, i) => {
           const bullish = bar.close >= bar.open;
@@ -113,6 +146,8 @@ export function CandlestickChart({
             transition={{ duration: 0.8, ease: [0.65, 0, 0.35, 1] }}
           />
         ))}
+        {buys.map((i) => marker(i, "buy"))}
+        {sells.map((i) => marker(i, "sell"))}
       </svg>
 
       <div className="mt-2 flex justify-between text-sm text-text-faint">
@@ -136,6 +171,14 @@ export function CandlestickChart({
           ))}
         </div>
       )}
-    </div>
+    </>
+  );
+
+  // Bare when the chart is already inside a panel that has its own border and
+  // heading; boxed when it stands alone, which is how every other page uses it.
+  return bare ? (
+    body
+  ) : (
+    <div className="rounded-xl border border-border bg-surface p-5">{body}</div>
   );
 }
