@@ -681,23 +681,84 @@ export interface QuoteRow {
   asset: string;
   currency: string;
   cached: boolean;
+  /** On the curated list — so removable. False for the derived rows. */
+  saved: boolean;
 }
 
+/**
+ * `mode` is which list is in force. `auto` is the derived default — this
+ * symbol, then the cache, then the quick picks. `custom` means somebody has
+ * edited the board, and it is then exactly `saved` (plus the symbol on
+ * screen), *including when `saved` is empty*: a board emptied on purpose must
+ * not refill itself from the cache on the next read.
+ */
 export interface WatchlistResponse {
   interval: string;
   active: string;
+  mode: "auto" | "custom";
+  saved: string[];
   quotes: QuoteRow[];
   source: string;
+}
+
+/** Every mutation takes the same query the read does and returns the whole
+ *  board, re-priced, so a caller replaces its state rather than reconciling. */
+function watchlistQuery(
+  symbol: string,
+  options: { interval?: string; limit?: number } = {},
+): string {
+  const query = new URLSearchParams({ symbol });
+  if (options.interval) query.set("interval", options.interval);
+  if (options.limit) query.set("limit", String(options.limit));
+  return query.toString();
 }
 
 export function getWatchlist(
   symbol: string,
   options: { interval?: string; limit?: number } = {},
 ): Promise<WatchlistResponse> {
-  const query = new URLSearchParams({ symbol });
-  if (options.interval) query.set("interval", options.interval);
-  if (options.limit) query.set("limit", String(options.limit));
-  return request(`/api/watchlist?${query}`);
+  return request(`/api/watchlist?${watchlistQuery(symbol, options)}`);
+}
+
+export function addToWatchlist(
+  entry: string,
+  symbol: string,
+  options: { interval?: string; limit?: number } = {},
+): Promise<WatchlistResponse> {
+  return request(`/api/watchlist?${watchlistQuery(symbol, options)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ symbol: entry }),
+  });
+}
+
+export function removeFromWatchlist(
+  entry: string,
+  symbol: string,
+  options: { interval?: string; limit?: number } = {},
+): Promise<WatchlistResponse> {
+  return request(
+    `/api/watchlist/${encodeURIComponent(entry)}?${watchlistQuery(symbol, options)}`,
+    { method: "DELETE" },
+  );
+}
+
+export function clearWatchlist(
+  symbol: string,
+  options: { interval?: string; limit?: number } = {},
+): Promise<WatchlistResponse> {
+  return request(`/api/watchlist/clear?${watchlistQuery(symbol, options)}`, {
+    method: "POST",
+  });
+}
+
+export function resetWatchlist(
+  symbol: string,
+  options: { interval?: string; limit?: number } = {},
+): Promise<WatchlistResponse> {
+  return request(`/api/watchlist/reset?${watchlistQuery(symbol, options)}`, {
+    method: "POST",
+  });
 }
 
 export function getSources(): Promise<SourceCatalogue> {

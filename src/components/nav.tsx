@@ -37,7 +37,12 @@ export function Nav() {
             href="/"
             className="font-mono text-sm tracking-tight text-text transition-colors hover:text-accent"
           >
-            obsidian<span className="text-accent">.</span>
+            {/* The product, not the design system. "Obsidian" is the name of
+                the visual language this shell is built in (see
+                design-system/MANIFESTO.md); putting it in the header made the
+                one always-visible link say something a person using the desk
+                has no way to interpret. */}
+            ai stock<span className="text-accent">.</span>
           </Link>
         </motion.div>
 

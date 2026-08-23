@@ -35,7 +35,7 @@ export default function Home() {
       <main className="relative mx-auto max-w-4xl px-6 pb-32">
         <section className="pt-28 text-center sm:pt-40">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-text-faint">
-            AI Stock — Obsidian
+            AI Stock
           </p>
           <ShimmerHeading className="mx-auto mt-5 max-w-3xl text-4xl font-medium tracking-tight sm:text-6xl">
             A research desk that grades its own calls.

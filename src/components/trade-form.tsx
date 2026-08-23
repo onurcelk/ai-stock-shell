@@ -5,7 +5,27 @@ import { motion } from "motion/react";
 import { transitionInOut } from "@/lib/motion";
 import { postTrade, getWatchlist, ApiError } from "@/lib/api";
 
-export function TradeForm({ onTraded }: { onTraded: () => void }) {
+/**
+ * A ticket filled in from somewhere else — the positions table's Sell button.
+ *
+ * `nonce` is what makes it fire: the same position clicked twice is the same
+ * three values, and a ticket keyed on the values alone would ignore the second
+ * click. Bumping a counter says "again", which is what was meant.
+ */
+export interface TradePrefill {
+  symbol: string;
+  quantity: string;
+  price: string;
+  nonce: number;
+}
+
+export function TradeForm({
+  onTraded,
+  prefill,
+}: {
+  onTraded: () => void;
+  prefill?: TradePrefill | null;
+}) {
   const [symbol, setSymbol] = useState("");
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
@@ -45,6 +65,22 @@ export function TradeForm({ onTraded }: { onTraded: () => void }) {
     };
   }, [symbol, prefilled]);
 
+  // The last ticket accepted from outside. Adjusting state during render is
+  // React's own answer to "a prop changed and some state derived from it must
+  // move" -- an effect for this would render once with the old values and
+  // again with the new ones, and would fight the auto-prefill below.
+  const [applied, setApplied] = useState(0);
+  if (prefill && prefill.nonce !== applied) {
+    setApplied(prefill.nonce);
+    setSymbol(prefill.symbol);
+    setQuantity(prefill.quantity);
+    setPrice(prefill.price);
+    // Filling from a row counts as having typed it: the auto-prefill below
+    // must not overwrite the price the row was actually priced at.
+    setPrefilled(false);
+    setMessage(null);
+  }
+
   const submit = async (side: "buy" | "sell") => {
     setBusy(true);
     setMessage(null);
@@ -78,9 +114,19 @@ export function TradeForm({ onTraded }: { onTraded: () => void }) {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={transitionInOut}
+      id="trade"
       className="rounded-xl border border-border bg-surface p-5"
     >
-      <p className="mb-3 font-sans text-sm font-semibold text-text">Trade</p>
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <p className="font-sans text-sm font-semibold text-text">Trade</p>
+        {/* Said once, here, rather than beside each button: every change to
+            the book goes through this ticket, because the ledger is what makes
+            the book auditable and a directly edited position has no trade
+            behind it. */}
+        <p className="text-xs text-text-faint">
+          Every position change is a trade — the ledger is the record
+        </p>
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <input
           value={symbol}

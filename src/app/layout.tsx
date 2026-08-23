@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Obsidian — AI Stock",
-  description: "Dark-only, full-animation design system for the AI Stock research desk.",
+  title: "AI Stock",
+  description: "A research desk that grades its own calls.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

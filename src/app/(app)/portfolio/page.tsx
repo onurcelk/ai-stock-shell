@@ -3,9 +3,15 @@
 import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { staggerContainer, staggerItem, transitionInOut } from "@/lib/motion";
-import { getPortfolio, ApiError, type PortfolioResponse } from "@/lib/api";
+import {
+  getPortfolio,
+  postTrade,
+  clearLedger,
+  ApiError,
+  type PortfolioResponse,
+} from "@/lib/api";
 import { LineSeries, Legend, type Series } from "@/components/series-chart";
-import { TradeForm } from "@/components/trade-form";
+import { TradeForm, type TradePrefill } from "@/components/trade-form";
 
 const ACTION_COLOR: Record<string, string> = {
   STRONG_BUY: "var(--up)",
@@ -34,6 +40,12 @@ export default function PortfolioPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [prefill, setPrefill] = useState<TradePrefill | null>(null);
+  // A counter rather than a timestamp: the ticket only needs to know that
+  // this is a new instruction, and a clock read is not a pure one.
+  const [tickets, setTickets] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -52,6 +64,97 @@ export default function PortfolioPage() {
       ignore = true;
     };
   }, [refreshKey]);
+
+  const refresh = () => setRefreshKey((k) => k + 1);
+
+  /**
+   * Load the ticket from a row rather than trading straight off the table.
+   *
+   * A one-click sell of a whole position is the destructive action that is
+   * easiest to trigger by accident, so the deliberate default is to fill the
+   * ticket in and let it be read before it is sent. `Close` below is the
+   * one-click path, and it asks first.
+   */
+  const sellFrom = (symbol: string, units: number, last: number | null) => {
+    const nonce = tickets + 1;
+    setTickets(nonce);
+    setPrefill({
+      symbol,
+      quantity: String(units),
+      price: last !== null ? String(last) : "",
+      nonce,
+    });
+    document.getElementById("trade")?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  /**
+   * Close a position: sell every unit at the last price we hold for it.
+   *
+   * Goes through the same `POST /api/portfolio/trade` as a hand-typed sell, so
+   * it lands in the ledger as an ordinary trade with a realised figure. There
+   * is no "delete this position" — a position that vanished without a trade
+   * behind it would leave the book and the ledger disagreeing, and the ledger
+   * is the half that is meant to be trustworthy.
+   *
+   * Priced from the cache, not from a fresh quote: the table already shows the
+   * number, and filling at a price the person cannot see would be worse than
+   * refusing. An unpriced row therefore cannot be closed from here.
+   */
+  const closePosition = async (symbol: string, units: number, last: number) => {
+    if (!window.confirm(
+      `Sell all ${units} units of ${symbol} at ${last.toFixed(2)}? ` +
+      "This is recorded in the ledger as a trade.")) {
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      const transaction = await postTrade({
+        side: "sell", symbol, quantity: units, price: last,
+      });
+      setNotice({
+        text: `Closed ${symbol} — realised ${transaction.realised >= 0 ? "+" : ""}${transaction.realised.toFixed(2)}`,
+        ok: true,
+      });
+      refresh();
+    } catch (err) {
+      setNotice({
+        text: err instanceof ApiError ? err.message : "The position could not be closed.",
+        ok: false,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
+   * Empty the transaction ledger.
+   *
+   * Deliberately the only destructive control that is nowhere near the table:
+   * it does not touch a position, it discards the history of how the positions
+   * got there — realised P&L and fees included — and nothing regenerates it.
+   */
+  const wipeLedger = async () => {
+    if (!window.confirm(
+      "Clear the whole transaction ledger? Realised P&L and every recorded " +
+      "trade go with it, and the positions stay where they are.")) {
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      await clearLedger();
+      setNotice({ text: "The ledger is empty.", ok: true });
+      refresh();
+    } catch (err) {
+      setNotice({
+        text: err instanceof ApiError ? err.message : "The ledger could not be cleared.",
+        ok: false,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -85,8 +188,18 @@ export default function PortfolioPage() {
       </motion.h1>
 
       <div className="mb-6">
-        <TradeForm onTraded={() => setRefreshKey((k) => k + 1)} />
+        <TradeForm onTraded={refresh} prefill={prefill} />
       </div>
+
+      {notice && (
+        <p
+          className="mb-6 rounded-lg border border-border bg-surface p-3 text-sm"
+          style={{ color: notice.ok ? "var(--up)" : "var(--down)" }}
+          role="status"
+        >
+          {notice.text}
+        </p>
+      )}
 
       <motion.div
         variants={staggerContainer(0.05)}
@@ -194,6 +307,7 @@ export default function PortfolioPage() {
               <th className="px-4 py-3 font-normal">P&amp;L</th>
               <th className="px-4 py-3 font-normal">Weight %</th>
               <th className="px-4 py-3 font-normal">Call</th>
+              <th className="px-4 py-3 text-right font-normal">Edit</th>
             </tr>
           </thead>
           <tbody>
@@ -224,6 +338,30 @@ export default function PortfolioPage() {
                   <td className="px-4 py-3 font-mono font-medium" style={{ color }}>
                     {row.call ? row.call.action.replace("_", " ") : "—"}
                   </td>
+                  <td className="px-4 py-3">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => sellFrom(row.Symbol, row.Units, row.Last)}
+                        disabled={busy}
+                        className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:border-border-hover hover:text-text disabled:opacity-40"
+                        title="Load this position into the ticket — edit the units before sending"
+                      >
+                        Sell
+                      </button>
+                      <button
+                        onClick={() => row.Last !== null && closePosition(row.Symbol, row.Units, row.Last)}
+                        disabled={busy || row.Last === null}
+                        className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:border-down hover:text-down disabled:opacity-40"
+                        title={
+                          row.Last === null
+                            ? "No cached price for this symbol, so there is nothing to fill at"
+                            : "Sell every unit at the last price, recorded as a trade"
+                        }
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -233,7 +371,16 @@ export default function PortfolioPage() {
 
       {ledger.length > 0 && (
         <div className="mt-8">
-          <h2 className="mb-3 font-sans text-lg font-semibold text-text">Closed trades</h2>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="font-sans text-lg font-semibold text-text">Closed trades</h2>
+            <button
+              onClick={wipeLedger}
+              disabled={busy}
+              className="text-xs text-text-faint transition-colors hover:text-down disabled:opacity-40"
+            >
+              Clear ledger
+            </button>
+          </div>
           <div className="overflow-x-auto rounded-xl border border-border bg-surface">
             <table className="w-full text-left text-sm">
               <thead>
