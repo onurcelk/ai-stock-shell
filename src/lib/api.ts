@@ -614,6 +614,98 @@ export function getAgentCatalogue(): Promise<AgentCatalogue> {
   return request("/api/agents");
 }
 
+/**
+ * The instant agents: three fixed rules and seven ported TradingView studies.
+ *
+ * These are the half of the Trading-agents tab that never needed a background
+ * job -- they run in milliseconds, so they are plain GETs rather than a job to
+ * start and poll. They write nothing: no ledger, no book, no History run.
+ */
+export interface StrategyParam {
+  name: string;
+  kind: "int" | "bool";
+  min?: number;
+  max?: number;
+  /** Resolved against the series length, so a page never recomputes it. */
+  default: number | boolean;
+  describe: string;
+}
+
+export interface StrategyEntry {
+  key: string;
+  kind: "rule" | "study";
+  name: string;
+  describe: string;
+  /** The trading rule in words. For a study, its published one. */
+  rule: string;
+  params: StrategyParam[];
+  requires?: string[];
+  pane?: string;
+  source?: string | null;
+}
+
+export interface StrategyCatalogue {
+  rules: StrategyEntry[];
+  studies: StrategyEntry[];
+  sizing_modes: string[];
+  panes: { overlay: string; oscillator: string };
+}
+
+export interface StrategyResult {
+  symbol: string;
+  label: string;
+  kind: "rule" | "study";
+  key: string;
+  name: string;
+  rule: string;
+  source: string | null;
+  settings: Record<string, unknown>;
+  metrics: Record<string, number>;
+  dates: string[];
+  equity: number[];
+  buys: number[];
+  sells: number[];
+  final_value: number;
+  initial_money: number;
+  trades: Record<string, unknown>[];
+  /** Overlay lines to draw on a price axis; null for an oscillator. */
+  bands: Record<string, number[]> | null;
+}
+
+export interface StrategyRequest {
+  key: string;
+  period?: string;
+  interval?: string;
+  window?: number;
+  follow_breakout?: boolean;
+  short_window?: number;
+  long_window?: number;
+  delay?: number;
+  initial_money?: number;
+  max_buy?: number;
+  max_sell?: number;
+  fee_pct?: number;
+  slippage_pct?: number;
+  sizing?: string;
+  size_pct?: number;
+}
+
+export function getStrategyCatalogue(bars?: number): Promise<StrategyCatalogue> {
+  const query = bars ? `?bars=${bars}` : "";
+  return request(`/api/strategies${query}`);
+}
+
+export function runStrategy(
+  symbol: string,
+  options: StrategyRequest,
+): Promise<StrategyResult> {
+  const query = new URLSearchParams();
+  for (const [name, value] of Object.entries(options)) {
+    if (value !== undefined && value !== null) query.set(name, String(value));
+  }
+  return request(`/api/strategies/${ticker(symbol)}?${query}`);
+}
+
 export interface ModelCatalogue {
   models: string[];
   default_seed: number;
