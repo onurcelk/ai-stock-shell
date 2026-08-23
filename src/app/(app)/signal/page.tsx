@@ -7,6 +7,7 @@ import { getSignal, getSources, ApiError, type SignalResponse } from "@/lib/api"
 import { SignalCard } from "@/components/signal-card";
 import { HorizonCard } from "@/components/horizon-card";
 import { FreezeControl } from "@/components/freeze-control";
+import { Watchlist } from "@/components/watchlist";
 
 export default function SignalPage() {
   const [symbol, setSymbol] = useState("AAPL");
@@ -86,6 +87,18 @@ export default function SignalPage() {
           Get signal
         </button>
       </motion.div>
+
+      {/* The rail, as a board above the reading rather than beside it: the
+          page is a single column at this width, and a sidebar would push the
+          verdict off the first screen on a phone. */}
+      {!dataset && (
+        <div className="mb-8">
+          <Watchlist symbol={symbol} onSelect={(next) => {
+            setSymbol(next);
+            setInputValue(next);
+          }} />
+        </div>
+      )}
 
       {datasets.length > 0 && (
         <label className="mb-8 flex flex-wrap items-center gap-3 text-sm text-text-muted">

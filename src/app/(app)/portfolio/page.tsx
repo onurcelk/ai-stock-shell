@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "motion/react";
 import { staggerContainer, staggerItem, transitionInOut } from "@/lib/motion";
 import { getPortfolio, ApiError, type PortfolioResponse } from "@/lib/api";
+import { LineSeries, Legend, type Series } from "@/components/series-chart";
 import { TradeForm } from "@/components/trade-form";
 
 const ACTION_COLOR: Record<string, string> = {
@@ -70,7 +71,7 @@ export default function PortfolioPage() {
     );
   }
 
-  const { summary, positions, signal, ledger } = data;
+  const { summary, positions, signal, ledger, curve } = data;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-16">
@@ -101,6 +102,55 @@ export default function PortfolioPage() {
         <SummaryTile label="Positions" value={`${summary.positions}`} />
         <SummaryTile label="Largest position" value={`${summary.concentration_pct.toFixed(1)}%`} />
       </motion.div>
+
+      {curve && (
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={transitionInOut}
+          className="mt-4 rounded-xl border border-border bg-surface p-5"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-base text-text">
+              Value over the window every holding shares
+            </h2>
+            <p className="font-mono text-sm text-text-faint">{curve.bars} bars</p>
+          </div>
+          <div className="mt-4">
+            {(() => {
+              const series: Series[] = [
+                {
+                  name: "Book value",
+                  values: curve.value,
+                  color: "var(--accent)",
+                  width: 2.5,
+                },
+              ];
+              return (
+                <>
+                  <LineSeries series={series} references={[curve.cost_basis]} />
+                  <Legend series={series} />
+                </>
+              );
+            })()}
+          </div>
+          {/* Both caveats stated, because neither is visible in the line and
+              each one changes what it means. */}
+          <p className="mt-3 text-sm text-text-faint">
+            Guide line is the {fmtUsd(curve.cost_basis)} cost basis.
+            {curve.limited_by && (
+              <>
+                {" "}Limited to {curve.bars} bars by{" "}
+                <span className="font-mono">{curve.limited_by}</span>, the most
+                recently listed holding — the book is only defined where every
+                holding traded.
+              </>
+            )}{" "}
+            The curve applies today&rsquo;s share counts throughout, so it is a
+            what-if on the current book, not a record of what you actually held.
+          </p>
+        </motion.div>
+      )}
 
       {signal && (
         <motion.div

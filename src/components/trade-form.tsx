@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { transitionInOut } from "@/lib/motion";
-import { postTrade, ApiError } from "@/lib/api";
+import { postTrade, getWatchlist, ApiError } from "@/lib/api";
 
 export function TradeForm({ onTraded }: { onTraded: () => void }) {
   const [symbol, setSymbol] = useState("");
@@ -12,6 +12,38 @@ export function TradeForm({ onTraded }: { onTraded: () => void }) {
   const [fee, setFee] = useState("0");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  // Whether the price field still holds a prefill rather than something typed.
+  // Once it has been edited it is never overwritten: re-prefilling under
+  // someone mid-entry is worse than not prefilling at all.
+  const [prefilled, setPrefilled] = useState(true);
+
+  /**
+   * Prefill the price from the last close already in the cache.
+   *
+   * Read through the watchlist endpoint, which never downloads — a ticket that
+   * fired a fetch on every keystroke would be exactly the mistake
+   * `core.quotes` exists to avoid. A symbol with nothing cached simply leaves
+   * the field empty rather than guessing.
+   */
+  useEffect(() => {
+    const wanted = symbol.trim().toUpperCase();
+    if (!wanted || !prefilled) return;
+    let ignore = false;
+    const timer = setTimeout(() => {
+      getWatchlist(wanted, { limit: 1 })
+        .then((body) => {
+          const quote = body.quotes.find((row) => row.symbol === wanted);
+          if (!ignore && quote?.last != null) setPrice(String(quote.last));
+        })
+        .catch(() => {
+          // No cached quote is a normal state, not an error.
+        });
+    }, 300);
+    return () => {
+      ignore = true;
+      clearTimeout(timer);
+    };
+  }, [symbol, prefilled]);
 
   const submit = async (side: "buy" | "sell") => {
     setBusy(true);
@@ -65,6 +97,7 @@ export function TradeForm({ onTraded }: { onTraded: () => void }) {
         />
         <input
           value={price}
+          onFocus={() => setPrefilled(false)}
           onChange={(e) => setPrice(e.target.value)}
           placeholder="Price"
           inputMode="decimal"

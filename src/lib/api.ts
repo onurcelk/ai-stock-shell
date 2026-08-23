@@ -152,6 +152,25 @@ export interface LedgerRow {
   Realised: number | null;
 }
 
+/**
+ * The book's market value over time.
+ *
+ * Null when there is nothing to draw — an empty book, or holdings whose
+ * histories never overlap. Three fields carry caveats the line cannot: it is
+ * defined only where every holding traded (`limited_by` names the one that
+ * shortened it), and it applies today's share counts across the whole window,
+ * so it is a what-if on the current book rather than a record of what was
+ * actually held.
+ */
+export interface BookCurve {
+  dates: string[];
+  value: number[];
+  cost_basis: number;
+  bars: number;
+  limited_by: string | null;
+  assumes_today_s_quantities: boolean;
+}
+
 export interface PortfolioResponse {
   summary: PortfolioSummary;
   positions: PositionRow[];
@@ -160,6 +179,7 @@ export interface PortfolioResponse {
   signal: BookSignal | null;
   verdicts: Record<string, UltimateVerdict>;
   ledger: LedgerRow[];
+  curve: BookCurve | null;
 }
 
 export class ApiError extends Error {
@@ -645,6 +665,39 @@ export interface SourceCatalogue {
   default_period: string;
   datasets: string[];
   quick_picks: string[];
+}
+
+/**
+ * A watchlist row. `last` is null when the symbol is not in the cache yet —
+ * a real state, not an error: the board never downloads, so a symbol appears
+ * quote-less until it has been looked at somewhere that can report a failure.
+ */
+export interface QuoteRow {
+  symbol: string;
+  last: number | null;
+  change: number | null;
+  change_pct: number | null;
+  stamp: string | null;
+  asset: string;
+  currency: string;
+  cached: boolean;
+}
+
+export interface WatchlistResponse {
+  interval: string;
+  active: string;
+  quotes: QuoteRow[];
+  source: string;
+}
+
+export function getWatchlist(
+  symbol: string,
+  options: { interval?: string; limit?: number } = {},
+): Promise<WatchlistResponse> {
+  const query = new URLSearchParams({ symbol });
+  if (options.interval) query.set("interval", options.interval);
+  if (options.limit) query.set("limit", String(options.limit));
+  return request(`/api/watchlist?${query}`);
 }
 
 export function getSources(): Promise<SourceCatalogue> {
