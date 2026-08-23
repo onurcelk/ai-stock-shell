@@ -2,40 +2,26 @@ import Link from "next/link";
 import { AmbientBeams } from "@/components/ambient-beams";
 import { FeatureGrid } from "@/components/feature-grid";
 import { GradientButton } from "@/components/gradient-button";
+import { LedgerStats } from "@/components/ledger-stats";
 import { Nav } from "@/components/nav";
 import { ShimmerHeading } from "@/components/shimmer-heading";
-import { StatCard } from "@/components/stat-card";
 import { DESK_HOME } from "@/lib/routes";
 
 /**
- * What the ledger actually holds, read on 2026-08-23.
+ * The three headline figures live in `LedgerStats` and are read from
+ * `GET /api/research`, not typed in here.
  *
- * These were invented figures — a 0.67 hit rate at n=6 and a 0.21 Brier —
- * printed directly under a hero that promises no hit rate without its
- * confidence interval. At n=6 that interval is roughly [0.30, 0.90], which is
- * a coin, and ~0.25 is what saying "50%" to everything scores. A page arguing
- * for measurement discipline cannot open by breaking it.
+ * Two corrections got them there. They began as invented numbers — a 0.67 hit
+ * rate at n=6 and a 0.21 Brier — printed directly under a hero that promises
+ * no hit rate without its confidence interval; at n=6 that interval is roughly
+ * [0.30, 0.90], which is a coin, and ~0.25 is what saying "50%" to everything
+ * scores. They were then replaced with the real counts, hardcoded, "until
+ * Phase 5 exposes `core.research_view` over the API". Phase 5 did, and by the
+ * cutover the hardcoded pair had drifted two forecasts behind the ledger.
  *
- * Hardcoded until Phase 5 exposes `core.research_view` over the API; they drift
- * as collection runs, so re-read them rather than trusting these.
+ * A page arguing for measurement discipline cannot open by breaking it, and a
+ * number a person has to remember to update is a number that will be wrong.
  */
-const stats = [
-  {
-    label: "Forecasts frozen",
-    value: "227",
-    note: "Stamped and sealed. Only a matured one can ever be scored.",
-  },
-  {
-    label: "Outcomes scored",
-    value: "93",
-    note: "Resolved against the price that actually arrived.",
-  },
-  {
-    label: "Independent cutoffs",
-    value: "2 / 50",
-    note: "Below the promotion floor. Nothing here can support a decision yet — and it says so.",
-  },
-];
 
 export default function Home() {
   return (
@@ -71,11 +57,7 @@ export default function Home() {
         </section>
 
         <section className="mt-28">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {stats.map((stat) => (
-              <StatCard key={stat.label} {...stat} />
-            ))}
-          </div>
+          <LedgerStats />
         </section>
 
         <section className="mt-20">
