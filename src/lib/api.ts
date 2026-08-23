@@ -290,6 +290,37 @@ export function postTrade(trade: TradeRequest): Promise<Transaction> {
   });
 }
 
+/**
+ * A position stated outright rather than produced by a fill.
+ *
+ * Distinct from a trade on purpose: a buy re-averages the cost basis over
+ * what was already held, which is right when units are being acquired and
+ * wrong when the point is to correct what the book says. Both land in the
+ * ledger -- side `adjust` or `discard`, never `buy`/`sell`, because no money
+ * moved and an invented fill in the record would be worse than none.
+ */
+export interface PositionRequest {
+  symbol: string;
+  quantity: number;
+  unit_cost: number;
+  note?: string;
+}
+
+export function putPosition(position: PositionRequest): Promise<Transaction> {
+  return request("/api/portfolio/position", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(position),
+  });
+}
+
+export function discardPosition(symbol: string, note = ""): Promise<Transaction> {
+  const query = note ? `?note=${encodeURIComponent(note)}` : "";
+  return request(`/api/portfolio/position/${encodeURIComponent(symbol)}${query}`, {
+    method: "DELETE",
+  });
+}
+
 export async function clearLedger(): Promise<void> {
   await request("/api/portfolio/ledger/clear", { method: "POST" });
 }

@@ -6,12 +6,14 @@ import { staggerContainer, staggerItem, transitionInOut } from "@/lib/motion";
 import {
   getPortfolio,
   postTrade,
+  discardPosition,
   clearLedger,
   ApiError,
   type PortfolioResponse,
 } from "@/lib/api";
 import { LineSeries, Legend, type Series } from "@/components/series-chart";
 import { TradeForm, type TradePrefill } from "@/components/trade-form";
+import { PositionForm } from "@/components/position-form";
 
 const ACTION_COLOR: Record<string, string> = {
   STRONG_BUY: "var(--up)",
@@ -128,6 +130,38 @@ export default function PortfolioPage() {
   };
 
   /**
+   * Drop a position from the book without selling it.
+   *
+   * Deliberately not the same as Close. Close sells every unit and books a
+   * realised figure -- it claims the position was closed at a price, which is
+   * a statement about what happened. This says the row should not be there:
+   * entered by mistake, transferred out, never held. It realises nothing, so
+   * it can neither flatter nor damage the realised total, and the units and
+   * basis it dropped go into the ledger row so it can be put back by hand.
+   */
+  const discard = async (symbol: string, units: number) => {
+    if (!window.confirm(
+      `Drop ${symbol} (${units} units) from the book without selling it? ` +
+      "Nothing is realised. Use Close instead if you actually sold it.")) {
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      await discardPosition(symbol);
+      setNotice({ text: `${symbol} dropped from the book — nothing realised.`, ok: true });
+      refresh();
+    } catch (err) {
+      setNotice({
+        text: err instanceof ApiError ? err.message : "The position could not be dropped.",
+        ok: false,
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /**
    * Empty the transaction ledger.
    *
    * Deliberately the only destructive control that is nowhere near the table:
@@ -187,8 +221,9 @@ export default function PortfolioPage() {
         Portfolio
       </motion.h1>
 
-      <div className="mb-6">
+      <div className="mb-6 space-y-4">
         <TradeForm onTraded={refresh} prefill={prefill} />
+        <PositionForm onSaved={refresh} />
       </div>
 
       {notice && (
@@ -359,6 +394,14 @@ export default function PortfolioPage() {
                         }
                       >
                         Close
+                      </button>
+                      <button
+                        onClick={() => discard(row.Symbol, row.Units)}
+                        disabled={busy}
+                        className="rounded-md border border-border px-2.5 py-1 text-xs text-text-muted transition-colors hover:border-down hover:text-down disabled:opacity-40"
+                        title="Drop this row from the book without selling it — realises nothing"
+                      >
+                        Discard
                       </button>
                     </div>
                   </td>
