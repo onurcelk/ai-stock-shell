@@ -6,6 +6,7 @@ import { staggerContainer, transitionInOut } from "@/lib/motion";
 import { getSignal, ApiError, type SignalResponse } from "@/lib/api";
 import { SignalCard } from "@/components/signal-card";
 import { HorizonCard } from "@/components/horizon-card";
+import { FreezeControl } from "@/components/freeze-control";
 
 export default function SignalPage() {
   const [symbol, setSymbol] = useState("AAPL");
@@ -77,6 +78,8 @@ export default function SignalPage() {
       {data && !loading && !error && (
         <div className="space-y-6">
           <SignalCard verdict={data.verdict} />
+
+          <FreezeControl symbol={symbol} onFrozen={setData} />
 
           <motion.div
             variants={staggerContainer(0.06)}

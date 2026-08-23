@@ -77,7 +77,13 @@ export interface FreezeReport {
 
 export interface SignalResponse {
   verdict: UltimateVerdict;
-  freeze: FreezeReport;
+  /**
+   * `null` on a read. `GET /api/signal/{symbol}` never writes to the forecast
+   * ledger -- a page load, a prefetch, a StrictMode double-invoke and an
+   * end-to-end replay all issue GETs, and none of them is a person choosing to
+   * record a prospective forecast. Freezing is `freezeSignal()` below.
+   */
+  freeze: (FreezeReport & { summary: string }) | null;
 }
 
 export interface Bar {
@@ -173,6 +179,19 @@ const ticker = (symbol: string) =>
 
 export function getSignal(symbol: string): Promise<SignalResponse> {
   return request(`/api/signal/${ticker(symbol)}`);
+}
+
+/**
+ * Record the current reading as a prospective forecast.
+ *
+ * The engine runs once inside the freeze, so the verdict that comes back is
+ * the verdict that was written -- show that one, not the one already on
+ * screen. A refused write arrives as `freeze.error` or `freeze.excluded` on a
+ * successful response, never as a thrown error: the reading is valid whether
+ * or not the ledger accepted it.
+ */
+export function freezeSignal(symbol: string): Promise<SignalResponse> {
+  return request(`/api/signal/${ticker(symbol)}/freeze`, { method: "POST" });
 }
 
 export function getOhlcv(
@@ -442,4 +461,184 @@ export interface ResearchResponse {
 
 export function getResearch(): Promise<ResearchResponse> {
   return request("/api/research");
+}
+
+// ------------------------------------------------------------------- Jobs
+
+export type JobState = "queued" | "running" | "completed" | "failed";
+
+export interface JobProgress {
+  /** 0 to 1. */
+  fraction: number;
+  message: string;
+}
+
+export interface Job<T = unknown> {
+  id: string;
+  kind: "walkforward" | "project" | "agent";
+  state: JobState;
+  params: Record<string, unknown>;
+  progress: JobProgress;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  error: string | null;
+  /** Absent until the job completes, and absent from the listing entirely. */
+  result?: T | null;
+}
+
+/** What a POST returns: the job, without a result, plus whether it is new. */
+export interface StartedJob extends Job {
+  /**
+   * True when an identical request was already in flight and this call joined
+   * it rather than starting a second one.
+   */
+  duplicate: boolean;
+}
+
+export interface WalkForwardRequest {
+  symbol: string;
+  period?: string;
+  interval?: string;
+  model?: string;
+  folds?: number;
+  horizon?: number;
+  epochs?: number;
+  num_layers?: number;
+  size_layer?: number;
+  timestamp?: number;
+  dropout?: number;
+  learning_rate?: number;
+  seed?: number | null;
+  min_train?: number;
+}
+
+export interface WalkForwardResult {
+  symbol: string;
+  label: string;
+  run_id: string;
+  folds: number;
+  horizon: number;
+  model: string;
+  summary: Record<string, number>;
+  folds_beating_naive: number;
+  table: Record<string, unknown>[];
+  settings: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+}
+
+export interface ProjectRequest extends Omit<WalkForwardRequest, "folds" | "min_train"> {
+  horizon?: number;
+}
+
+export interface ProjectResult {
+  symbol: string;
+  label: string;
+  model: string;
+  horizon: number;
+  last_price: number;
+  last_date: string;
+  path: number[];
+  final: number;
+  move_pct: number;
+  direction: number;
+}
+
+export interface AgentRequest {
+  symbol: string;
+  agent: string;
+  period?: string;
+  interval?: string;
+  iterations?: number;
+  window_size?: number;
+  layer_size?: number;
+  seed?: number;
+  initial_money?: number;
+  max_buy?: number;
+  max_sell?: number;
+  fee_pct?: number;
+  slippage_pct?: number;
+  sizing?: string;
+  size_pct?: number;
+}
+
+export interface AgentResult {
+  symbol: string;
+  label: string;
+  run_id: string;
+  agent: string;
+  settings: Record<string, unknown>;
+  metrics: Record<string, number>;
+  rewards: number[];
+  train_seconds: number;
+  improved: boolean;
+  dates: string[];
+  equity: number[];
+  buys: number[];
+  sells: number[];
+  final_value: number;
+}
+
+export interface AgentCatalogue {
+  agents: { name: string; default_iterations: number | null; notebook: number | null }[];
+  sizing_modes: string[];
+}
+
+export function startWalkForward(request: WalkForwardRequest): Promise<StartedJob> {
+  return post("/api/jobs/walkforward", request);
+}
+
+export function startProjection(request: ProjectRequest): Promise<StartedJob> {
+  return post("/api/jobs/project", request);
+}
+
+export function startAgent(request: AgentRequest): Promise<StartedJob> {
+  return post("/api/jobs/agent", request);
+}
+
+export function getAgentCatalogue(): Promise<AgentCatalogue> {
+  return request("/api/agents");
+}
+
+/**
+ * Poll one job.
+ *
+ * A 410 means the server restarted: the registry is in memory, so the job is
+ * gone rather than merely unfinished. Stop polling and offer to start again --
+ * retrying the same id will never succeed.
+ */
+export function getJob<T = unknown>(id: string): Promise<Job<T>> {
+  return request(`/api/jobs/${encodeURIComponent(id)}`);
+}
+
+export function getJobs(): Promise<{ jobs: Job[]; boot: string }> {
+  return request("/api/jobs");
+}
+
+function post<T>(path: string, body: unknown): Promise<T> {
+  return request(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * Poll `getJob` until it reaches a terminal state, reporting progress on the
+ * way. Rejects with the job's own error message if it failed, so a caller can
+ * treat a failed training the same as a failed request.
+ */
+export async function followJob<T>(
+  id: string,
+  onProgress?: (job: Job<T>) => void,
+  { intervalMs = 1000, signal }: { intervalMs?: number; signal?: AbortSignal } = {},
+): Promise<T> {
+  for (;;) {
+    if (signal?.aborted) throw new ApiError("cancelled");
+    const job = await getJob<T>(id);
+    onProgress?.(job);
+    if (job.state === "completed") return job.result as T;
+    if (job.state === "failed") throw new ApiError(job.error ?? "the job failed");
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
 }
