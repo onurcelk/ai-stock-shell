@@ -21,6 +21,7 @@ export const ROUTES: Route[] = [
   { href: "/agents", label: "Agents" },
   { href: "/montecarlo", label: "Monte Carlo" },
   { href: "/history", label: "History" },
+  { href: "/options", label: "Options" },
   { href: "/research", label: "Research" },
 ];
 

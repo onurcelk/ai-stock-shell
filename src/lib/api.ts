@@ -1053,3 +1053,96 @@ export async function followJob<T>(
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 }
+
+/* ---------------------------------------------------------------- options */
+
+/**
+ * The options premium screen.
+ *
+ * Every payload carries `WARNING` and `backtestable: false`, and both are
+ * required rather than decorative: no free source serves options data
+ * point-in-time, so nothing here is or can be backtested. A component that
+ * renders the yields without the caveat is showing a quote as if it were a
+ * measured return. `reports/OPTIONS1_ADMISSIBILITY.md` §3 has the reasoning.
+ */
+export interface OptionKind {
+  key: string;
+  name: string;
+  describe: string;
+}
+
+export interface OptionKinds {
+  kinds: OptionKind[];
+  backtestable: false;
+  WARNING: string;
+}
+
+export interface OptionExpiries {
+  symbol: string;
+  expiries: string[];
+  WARNING: string;
+}
+
+export interface OptionRow {
+  contract: string;
+  strike: number;
+  bid: number | null;
+  ask: number | null;
+  premium: number;
+  implied_volatility: number | null;
+  open_interest: number | null;
+  volume: number | null;
+  days_to_expiry: number;
+  moneyness: number;
+  /** Premium over collateral. Assumes the option expires worthless. */
+  static_yield: number;
+  static_yield_annualised: number;
+  /** How far the underlying must move to be assigned. Not a probability. */
+  cushion: number;
+  /** No live bid behind this row — the premium came from a stale last trade. */
+  is_stale: boolean;
+}
+
+export interface OptionScreen {
+  symbol: string;
+  kind: string;
+  expiry: string;
+  spot: number;
+  fetched_at: string;
+  days_to_expiry: number;
+  /** Whether in-the-money strikes were filtered out of `rows`. */
+  out_of_the_money_only: boolean;
+  rows: OptionRow[];
+  backtestable: false;
+  WARNING: string;
+}
+
+export function getOptionKinds(): Promise<OptionKinds> {
+  return request("/api/options/kinds");
+}
+
+export function getOptionExpiries(symbol: string): Promise<OptionExpiries> {
+  return request(`/api/options/${ticker(symbol)}/expiries`);
+}
+
+export function getOptionScreen(
+  symbol: string,
+  options: {
+    kind?: string;
+    expiry?: string;
+    minOpenInterest?: number;
+    outOfTheMoneyOnly?: boolean;
+  } = {},
+): Promise<OptionScreen> {
+  const query = new URLSearchParams();
+  if (options.kind) query.set("kind", options.kind);
+  if (options.expiry) query.set("expiry", options.expiry);
+  if (options.minOpenInterest) {
+    query.set("min_open_interest", String(options.minOpenInterest));
+  }
+  if (options.outOfTheMoneyOnly === false) {
+    query.set("out_of_the_money_only", "false");
+  }
+  const suffix = query.toString() ? `?${query}` : "";
+  return request(`/api/options/${ticker(symbol)}/screen${suffix}`);
+}
