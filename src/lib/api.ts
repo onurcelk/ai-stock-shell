@@ -1146,3 +1146,60 @@ export function getOptionScreen(
   const suffix = query.toString() ? `?${query}` : "";
   return request(`/api/options/${ticker(symbol)}/screen${suffix}`);
 }
+
+/* --------------------------------------------------------------- evidence */
+
+/**
+ * The engine's own sources, for drawing on the chart.
+ *
+ * Distinct from `getStudies`, which serves the seven TradingView ports. These
+ * are the fourteen sources `ultimate.py` weights into a verdict, and unlike
+ * the studies they all share one scale: [-1, +1], where the sign is the
+ * direction the source argues for and 0 means it has no opinion on that bar.
+ *
+ * `silent` is not an error list. A source that cannot read a series returns
+ * zeros by the engine's convention, and drawing that as a flat line would read
+ * as a measured neutral — a claim nobody made. Render the reason instead.
+ */
+export interface EvidenceSource {
+  key: string;
+  name: string;
+  family: string;
+  describe: string;
+  pane: "oscillator";
+  levels: number[];
+}
+
+export interface EvidenceCatalogue {
+  sources: EvidenceSource[];
+  families: Record<string, string>;
+  levels: number[];
+  scale: string;
+}
+
+export interface EvidenceResponse {
+  symbol: string;
+  interval: string;
+  dates: string[];
+  sources: Record<string, number[]>;
+  silent: Record<string, string>;
+  levels: number[];
+  bars: number;
+  is_fresh: boolean;
+}
+
+export function getEvidenceCatalogue(): Promise<EvidenceCatalogue> {
+  return request("/api/evidence");
+}
+
+export function getEvidence(
+  symbol: string,
+  keys: string[],
+  options: { period?: string; interval?: string; bars?: number } = {},
+): Promise<EvidenceResponse> {
+  const query = new URLSearchParams({ keys: keys.join(",") });
+  if (options.period) query.set("period", options.period);
+  if (options.interval) query.set("interval", options.interval);
+  if (options.bars) query.set("bars", String(options.bars));
+  return request(`/api/evidence/${ticker(symbol)}?${query}`);
+}

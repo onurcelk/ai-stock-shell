@@ -8,16 +8,36 @@ import {
   getStudies,
   getStudyCatalogue,
   getStats,
+  getEvidence,
+  getEvidenceCatalogue,
   ApiError,
   type OhlcvResponse,
   type StudiesResponse,
   type StudiesCatalogue,
   type StatsResponse,
+  type EvidenceCatalogue,
+  type EvidenceResponse,
 } from "@/lib/api";
 import { CandlestickChart, type Overlay } from "@/components/candlestick-chart";
 import { LineSeries, Legend, type Series } from "@/components/series-chart";
 
 const PERIODS = ["1mo", "3mo", "6mo", "1y", "5y"];
+
+/**
+ * Enough distinct colours for several sources sharing one axis.
+ *
+ * They can share it because every source in `indicators.SOURCES` returns
+ * [-1, +1] by contract, which is exactly what an RSI and a MACD histogram
+ * cannot do — hence one evidence pane, against one study pane per study.
+ */
+const EVIDENCE_COLORS = [
+  "var(--accent)",
+  "var(--up)",
+  "var(--down)",
+  "color-mix(in srgb, var(--accent) 55%, var(--text))",
+  "var(--text-muted)",
+  "color-mix(in srgb, var(--up) 55%, var(--text))",
+];
 
 const OSCILLATOR_COLORS = [
   "var(--accent)",
@@ -30,11 +50,14 @@ export default function ChartPage() {
   const [inputValue, setInputValue] = useState("AAPL");
   const [period, setPeriod] = useState("1y");
   const [picked, setPicked] = useState<string[]>([]);
+  const [pickedEvidence, setPickedEvidence] = useState<string[]>([]);
 
   const [data, setData] = useState<OhlcvResponse | null>(null);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [catalogue, setCatalogue] = useState<StudiesCatalogue | null>(null);
   const [studies, setStudies] = useState<StudiesResponse | null>(null);
+  const [evidenceMeta, setEvidenceMeta] = useState<EvidenceCatalogue | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -47,6 +70,13 @@ export default function ChartPage() {
       })
       .catch(() => {
         /* The chart works without the study picker; failing it is not fatal. */
+      });
+    getEvidenceCatalogue()
+      .then((response) => {
+        if (!ignore) setEvidenceMeta(response);
+      })
+      .catch(() => {
+        /* Same: the chart is the page, the pickers are additions to it. */
       });
     return () => {
       ignore = true;
@@ -105,6 +135,26 @@ export default function ChartPage() {
     };
   }, [symbol, period, picked, barCount]);
 
+  // The same window and the same slicing rule as the studies above, for the
+  // same reason: a source fitted to whatever range is on screen would change
+  // its own reading every time the range buttons were pressed.
+  useEffect(() => {
+    if (pickedEvidence.length === 0 || barCount === 0) return;
+    let ignore = false;
+
+    getEvidence(symbol, pickedEvidence, { period, bars: barCount })
+      .then((response) => {
+        if (!ignore) setEvidence(response);
+      })
+      .catch(() => {
+        /* A source that will not compute leaves the chart itself intact. */
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [symbol, period, pickedEvidence, barCount]);
+
   const lastBar = data?.bars[data.bars.length - 1];
   const meta = new Map(catalogue?.studies.map((s) => [s.key, s]) ?? []);
 
@@ -146,6 +196,29 @@ export default function ChartPage() {
       }
     }
   }
+
+  // One pane, not one per source: they share an axis honestly because they
+  // share a scale. `silent` never becomes a series — a flat line at zero reads
+  // as a measured neutral, which is a claim no source made.
+  const drawnEvidence = pickedEvidence.length > 0 ? evidence : null;
+  const evidenceMetaByKey = new Map(
+    evidenceMeta?.sources.map((source) => [source.key, source]) ?? [],
+  );
+  const evidenceSeries: Series[] = drawnEvidence
+    ? pickedEvidence
+        .filter((key) => drawnEvidence.sources[key])
+        .map((key, i) => ({
+          name: evidenceMetaByKey.get(key)?.name ?? key,
+          values: drawnEvidence.sources[key],
+          color: EVIDENCE_COLORS[i % EVIDENCE_COLORS.length],
+        }))
+    : [];
+  const silentEvidence = Object.entries(drawnEvidence?.silent ?? {});
+
+  const toggleEvidence = (key: string) =>
+    setPickedEvidence((was) =>
+      was.includes(key) ? was.filter((k) => k !== key) : [...was, key],
+    );
 
   const toggle = (key: string) =>
     setPicked((current) =>
@@ -224,6 +297,63 @@ export default function ChartPage() {
         </motion.div>
       )}
 
+      {evidenceMeta && (
+        <div className="mb-6 rounded-xl border border-border bg-surface p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <h2 className="text-base text-text">Engine evidence</h2>
+            {pickedEvidence.length > 0 && (
+              <button
+                onClick={() => setPickedEvidence([])}
+                className="text-sm text-text-faint transition-colors hover:text-text"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+          <p className="mt-1 max-w-2xl text-sm text-text-faint">
+            {evidenceMeta.scale}
+          </p>
+
+          {Object.entries(evidenceMeta.families).map(([family, describe]) => {
+            const inFamily = evidenceMeta.sources.filter(
+              (source) => source.family === family,
+            );
+            if (inFamily.length === 0) return null;
+            return (
+              <div key={family} className="mt-4">
+                <p
+                  className="text-xs uppercase tracking-wide text-text-faint"
+                  title={describe}
+                >
+                  {family}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {inFamily.map((source) => {
+                    const on = pickedEvidence.includes(source.key);
+                    const quiet = drawnEvidence?.silent[source.key];
+                    return (
+                      <button
+                        key={source.key}
+                        onClick={() => toggleEvidence(source.key)}
+                        title={quiet ?? source.describe}
+                        aria-pressed={on}
+                        className={`rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
+                          on
+                            ? "border-accent bg-accent-dim text-text"
+                            : "border-border text-text-muted hover:border-border-hover hover:text-text"
+                        } ${quiet ? "opacity-40" : ""}`}
+                      >
+                        {source.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {loading && <p className="text-sm text-text-muted">Loading {symbol}&hellip;</p>}
       {error && (
         <p className="rounded-lg border border-border bg-surface p-4 text-sm text-down">
@@ -257,6 +387,44 @@ export default function ChartPage() {
               <Legend series={pane.series} />
             </motion.div>
           ))}
+
+          {evidenceSeries.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={transitionInOut}
+              className="rounded-xl border border-border bg-surface p-5"
+            >
+              <h2 className="text-base text-text">Engine evidence</h2>
+              <p className="mt-1 text-sm text-text-faint">
+                What each source argued, bar by bar. Above zero is an argument
+                to buy and below it one to sell; this is the reading itself,
+                not the weight the verdict gave it.
+              </p>
+              <div className="mt-3">
+                <LineSeries series={evidenceSeries} references={[-1, 0, 1]} />
+              </div>
+              <Legend series={evidenceSeries} />
+            </motion.div>
+          )}
+
+          {silentEvidence.length > 0 && (
+            <div className="rounded-xl border border-border bg-surface p-5">
+              <p className="text-sm text-text-muted">
+                Asked, and had no opinion to give on this series — the engine&rsquo;s
+                own convention, and a fact about the data rather than a failure.
+                Drawn as a flat line it would read as a measured neutral, which
+                is a claim none of these made:
+              </p>
+              <ul className="mt-2 space-y-1">
+                {silentEvidence.map(([key, reason]) => (
+                  <li key={key} className="text-sm text-text-faint">
+                    {reason}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {shown && Object.keys(shown.unsupported).length > 0 && (
             <div className="rounded-xl border border-border bg-surface p-5">
