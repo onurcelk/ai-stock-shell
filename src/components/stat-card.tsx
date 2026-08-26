@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import { DrawIn } from "./draw-in";
 import { transitionInOut } from "@/lib/motion";
 
 function sparkPath(points: number[], width = 100, height = 32) {
@@ -67,19 +68,22 @@ export function StatCard({
       {note && <p className="mt-3 text-sm leading-snug text-text-faint">{note}</p>}
 
       {points && (
-        <svg viewBox="0 0 100 32" className="mt-4 h-8 w-full overflow-visible">
-          <motion.path
-            d={sparkPath(points)}
-            fill="none"
-            stroke={signed ? color : "var(--accent)"}
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            initial={{ pathLength: 0, opacity: 0 }}
-            whileInView={{ pathLength: 1, opacity: 1 }}
-            viewport={{ once: true, margin: "-80px" }}
-            transition={{ duration: 1.1, ease: [0.65, 0, 0.35, 1] }}
-          />
+        <svg
+          viewBox="0 0 100 32"
+          preserveAspectRatio="none"
+          className="mt-4 h-8 w-full overflow-visible"
+        >
+          <DrawIn width={100} height={32} duration={1.1} onView>
+            <path
+              d={sparkPath(points)}
+              fill="none"
+              stroke={signed ? color : "var(--accent)"}
+              strokeWidth={1.5}
+              vectorEffect="non-scaling-stroke"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </DrawIn>
         </svg>
       )}
     </motion.div>

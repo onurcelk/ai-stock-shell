@@ -14,14 +14,7 @@ import {
 import { LineSeries, Legend, type Series } from "@/components/series-chart";
 import { TradeForm, type TradePrefill } from "@/components/trade-form";
 import { PositionForm } from "@/components/position-form";
-
-const ACTION_COLOR: Record<string, string> = {
-  STRONG_BUY: "var(--up)",
-  BUY: "var(--up)",
-  HOLD: "var(--text-muted)",
-  SELL: "var(--down)",
-  STRONG_SELL: "var(--down)",
-};
+import { actionColor, actionLabel } from "@/lib/actions";
 
 function fmtUsd(value: number) {
   return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -271,7 +264,7 @@ export default function PortfolioPage() {
                   name: "Book value",
                   values: curve.value,
                   color: "var(--accent)",
-                  width: 2.5,
+                  width: 2,
                 },
               ];
               return (
@@ -347,7 +340,7 @@ export default function PortfolioPage() {
           </thead>
           <tbody>
             {positions.map((row) => {
-              const color = row.call ? (ACTION_COLOR[row.call.action] ?? "var(--text-muted)") : "var(--text-faint)";
+              const color = row.call ? actionColor(row.call.action) : "var(--text-faint)";
               return (
                 <tr key={row.Symbol} className="border-b border-border last:border-0">
                   <td className="px-4 py-3 font-mono text-text">{row.Symbol}</td>
@@ -371,7 +364,7 @@ export default function PortfolioPage() {
                     {row["Weight %"] !== null ? `${row["Weight %"]!.toFixed(1)}%` : "—"}
                   </td>
                   <td className="px-4 py-3 font-mono font-medium" style={{ color }}>
-                    {row.call ? row.call.action.replace("_", " ") : "—"}
+                    {row.call ? actionLabel(row.call.action) : "—"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">

@@ -2,22 +2,11 @@
 
 import { motion } from "motion/react";
 import { transitionInOut, springSoft } from "@/lib/motion";
+import { actionColor, actionLabel } from "@/lib/actions";
 import type { UltimateVerdict } from "@/lib/api";
 
-const ACTION_COLOR: Record<string, string> = {
-  STRONG_BUY: "var(--up)",
-  BUY: "var(--up)",
-  HOLD: "var(--text-muted)",
-  SELL: "var(--down)",
-  STRONG_SELL: "var(--down)",
-};
-
-function actionLabel(action: string) {
-  return action.replace("_", " ");
-}
-
 export function SignalCard({ verdict }: { verdict: UltimateVerdict }) {
-  const color = ACTION_COLOR[verdict.action] ?? "var(--text-muted)";
+  const color = actionColor(verdict.action);
   // -100..+100 score mapped to a 0..100% position on the sell<->buy meter.
   const meterPosition = ((verdict.score + 100) / 200) * 100;
 

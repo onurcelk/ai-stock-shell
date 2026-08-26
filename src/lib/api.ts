@@ -1054,6 +1054,134 @@ export async function followJob<T>(
   }
 }
 
+// -------------------------------------------------------------------- Scan
+
+/**
+ * The market scan: one horizon, a whole list, sorted by what it reads.
+ *
+ * `caveats` is not decoration and must be rendered. PIT-1 measured the 4-hour
+ * horizon *inverted* when read after the close (20.8% on acted calls,
+ * p = 0.009), which is exactly the horizon a screen of 4-hour BUYs is built
+ * on. The API carries the sentences rather than leaving them to the page, so
+ * a refactor here cannot quietly drop them.
+ */
+export interface ScanHorizon {
+  key: string;
+  label: string;
+  interval: string;
+  bars: number;
+  period: string;
+  min_bars?: number;
+  caveats?: string[];
+}
+
+/**
+ * A list a scan can run over. Two kinds, and `market` tells them apart.
+ *
+ * The desk's own lists (watchlist, book, cache, picks) arrive with their
+ * symbols inlined and a real `count`. The market lists — S&P 500, NASDAQ,
+ * NYSE, FTSE 100 — never inline thousands of tickers into a page-load
+ * payload, and their `count` is `null` until the listing has been downloaded,
+ * which only a scan does.
+ */
+export interface ScanUniverse {
+  key: string;
+  label: string;
+  describe: string;
+  symbols: string[];
+  count: number | null;
+  market: boolean;
+  needs_network: boolean;
+  fetched_at: string | null;
+  stale: boolean;
+  source: string;
+  /** What the source carried that the list drops: funds, warrants, test issues. */
+  excluded: Record<string, number>;
+}
+
+export interface ScanOptions {
+  horizons: ScanHorizon[];
+  default_horizon: string;
+  universes: ScanUniverse[];
+  actions: string[];
+  buy_actions: string[];
+  max_symbols: number;
+  /** Measured, so the page can price a scan in minutes before it is started. */
+  seconds_per_symbol: number;
+  cache_bytes_per_symbol: number;
+  bands: {
+    act: number;
+    strong: number;
+    min_confidence: number;
+    strong_confidence: number;
+  };
+}
+
+/** One source's contribution, for showing *why* a row is near the top. */
+export interface ScanLeader {
+  name: string;
+  score: number;
+  weight: number;
+  detail: string;
+}
+
+/**
+ * One symbol's line. Everything after `available` is absent when the symbol
+ * could not be read — an unreadable name is still a row, with its reason,
+ * rather than a silent omission from a list somebody is counting.
+ */
+export interface ScanRow {
+  symbol: string;
+  action: string;
+  available: boolean;
+  unavailable: string;
+  score: number;
+  confidence: number;
+  agreement?: number;
+  coverage?: number;
+  weighted_edge?: number;
+  expected_move_pct?: number;
+  typical_move_pct?: number;
+  target_price?: number;
+  last_price: number | null;
+  as_of?: string | null;
+  interval?: string;
+  bars_used?: number;
+  rows?: number;
+  sources?: { counted: number; total: number };
+  leaders?: ScanLeader[];
+}
+
+export interface ScanResult {
+  horizon: ScanHorizon;
+  universe: string;
+  source: string;
+  symbols: string[];
+  rows: ScanRow[];
+  counts: Record<string, number>;
+  scanned: number;
+  readable: number;
+  buys: string[];
+  caveats: string[];
+  seconds_per_symbol: number;
+  generated_at: string;
+}
+
+export interface ScanRequest {
+  universe?: string;
+  symbols?: string[];
+  horizon?: string;
+  force?: boolean;
+}
+
+export function getScanOptions(): Promise<ScanOptions> {
+  return request("/api/scan/options");
+}
+
+export function startScan(body: ScanRequest): Promise<StartedJob> {
+  return post("/api/jobs/scan", body);
+}
+
 /* ---------------------------------------------------------------- options */
 
 /**

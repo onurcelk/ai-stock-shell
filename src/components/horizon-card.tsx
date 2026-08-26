@@ -2,18 +2,11 @@
 
 import { motion } from "motion/react";
 import { staggerItem } from "@/lib/motion";
+import { actionColor, actionLabel } from "@/lib/actions";
 import type { HorizonVerdict } from "@/lib/api";
 
-const ACTION_COLOR: Record<string, string> = {
-  STRONG_BUY: "var(--up)",
-  BUY: "var(--up)",
-  HOLD: "var(--text-muted)",
-  SELL: "var(--down)",
-  STRONG_SELL: "var(--down)",
-};
-
 export function HorizonCard({ horizon }: { horizon: HorizonVerdict }) {
-  const color = ACTION_COLOR[horizon.action] ?? "var(--text-muted)";
+  const color = actionColor(horizon.action);
   const liveReadings = horizon.readings.filter((r) => r.weight > 0);
 
   return (
@@ -26,7 +19,7 @@ export function HorizonCard({ horizon }: { horizon: HorizonVerdict }) {
         <p className="text-sm text-text-faint">{horizon.interval}</p>
       </div>
       <p className="mt-2 font-sans text-xl font-semibold" style={{ color }}>
-        {horizon.action.replace("_", " ")}
+        {actionLabel(horizon.action)}
       </p>
       <p className="mt-1 font-mono text-sm text-text-muted">
         {horizon.score >= 0 ? "+" : ""}

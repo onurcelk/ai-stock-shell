@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
+import { DrawIn } from "./draw-in";
 
 /**
  * The simulated cone: sampled paths, the 5–95 band, and the median.
@@ -59,7 +60,8 @@ export function FanChart({
     " Z";
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-64 w-full overflow-visible">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"
+        className="h-64 w-full overflow-visible">
       <path d={band} fill="var(--accent)" opacity={0.12} />
 
       {paths.map((path, i) => (
@@ -68,7 +70,8 @@ export function FanChart({
           d={line(path)}
           fill="none"
           stroke="var(--accent)"
-          strokeWidth={0.12}
+          strokeWidth={0.75}
+          vectorEffect="non-scaling-stroke"
           opacity={0.18}
         />
       ))}
@@ -79,20 +82,21 @@ export function FanChart({
         y1={y(startPrice)}
         y2={y(startPrice)}
         stroke="var(--text-faint)"
-        strokeWidth={0.15}
-        strokeDasharray="1 1"
+        strokeWidth={1}
+        vectorEffect="non-scaling-stroke"
+        strokeDasharray="3 4"
       />
 
-      <motion.path
-        d={line(median)}
-        fill="none"
-        stroke="var(--accent)"
-        strokeWidth={0.5}
-        strokeLinecap="round"
-        initial={{ pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 0.9, ease: [0.65, 0, 0.35, 1] }}
-      />
+      <DrawIn width={width} height={height} duration={0.9}>
+        <path
+          d={line(median)}
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth={2}
+          vectorEffect="non-scaling-stroke"
+          strokeLinecap="round"
+        />
+      </DrawIn>
     </svg>
   );
 }
@@ -120,7 +124,8 @@ export function EndingsHistogram({
   const markerX = ((startPrice - first) / span) * width;
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="h-64 w-full overflow-visible">
+    <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none"
+        className="h-64 w-full overflow-visible">
       {counts.map((count, i) => {
         const barHeight = (count / tallest) * height;
         return (
@@ -147,8 +152,9 @@ export function EndingsHistogram({
           y1={0}
           y2={height}
           stroke="var(--text-muted)"
-          strokeWidth={0.25}
-          strokeDasharray="1 1"
+          strokeWidth={1.25}
+          vectorEffect="non-scaling-stroke"
+          strokeDasharray="3 4"
         />
       )}
     </svg>

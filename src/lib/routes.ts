@@ -14,6 +14,7 @@ export interface Route {
 /** Live pages, in the order the header shows them. */
 export const ROUTES: Route[] = [
   { href: "/signal", label: "Signal" },
+  { href: "/scan", label: "Scan" },
   { href: "/chart", label: "Chart" },
   { href: "/portfolio", label: "Portfolio" },
   { href: "/basket", label: "Basket" },

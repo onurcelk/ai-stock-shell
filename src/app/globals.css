@@ -55,3 +55,29 @@ body {
   background: var(--accent-dim);
   color: var(--text);
 }
+
+/**
+ * A mark that arrives a render late.
+ *
+ * The price chart's trade markers cannot be drawn until the svg has been
+ * measured, so they mount one render after everything around them — and a
+ * Motion element that mounts into a variant tree the parent has already run
+ * keeps its `initial` and never animates, which left the markers at opacity 0.
+ * A CSS animation runs whenever the element is created, whatever the tree
+ * around it is doing.
+ */
+@keyframes mark-in {
+  from { opacity: 0; }
+  to { opacity: 0.95; }
+}
+
+.mark-in {
+  animation: mark-in 300ms var(--ease-out) 120ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark-in {
+    animation: none;
+    opacity: 0.95;
+  }
+}

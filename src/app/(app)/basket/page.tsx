@@ -141,7 +141,7 @@ export default function BasketPage() {
           name: "Basket",
           values: result.equity,
           color: "var(--accent)",
-          width: 2.5,
+          width: 2,
         },
       ]
     : [];

@@ -20,10 +20,20 @@ import type { JobState } from "@/lib/use-job";
 export function JobProgress<T>({
   job,
   onRetry,
+  verb = "Training",
+  queueNote = "Waiting for the worker. The desk runs one training at a time, so a projection is not affected by whatever ran before it.",
 }: {
   job: JobState<T> & { busy: boolean };
   /** Offered only for a stale job, where retrying the id cannot work. */
   onRetry?: () => void;
+  /**
+   * What the running phase is called. Every job on the desk was a training
+   * until the scan, and a page reporting "Training" while it downloads sixty
+   * quotes describes work that is not happening.
+   */
+  verb?: string;
+  /** Why a queued job is waiting, which differs by what it is queued behind. */
+  queueNote?: string;
 }) {
   const { phase, fraction, message, error, stale, duplicate, jobId } = job;
 
@@ -42,7 +52,7 @@ export function JobProgress<T>({
         <p className="text-sm font-medium text-text">
           {phase === "starting" && "Starting…"}
           {phase === "queued" && "Queued"}
-          {phase === "running" && "Training"}
+          {phase === "running" && verb}
           {phase === "completed" && "Done"}
           {phase === "failed" && (stale ? "Job lost" : "Failed")}
         </p>
@@ -55,10 +65,7 @@ export function JobProgress<T>({
       </div>
 
       {phase === "queued" && (
-        <p className="mt-2 text-sm text-text-muted">
-          Waiting for the worker. The desk runs one training at a time, so a
-          projection is not affected by whatever ran before it.
-        </p>
+        <p className="mt-2 text-sm text-text-muted">{queueNote}</p>
       )}
 
       <AnimatePresence>
